@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>myapp — Hello World</title>
+
+  <!-- PWA -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#0f172a" />
+
+  <!-- iOS 홈 화면 설치용 -->
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="myapp" />
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="card">
+    <h1 id="greeting">Hello, World!</h1>
+    <p class="subtitle">myapp이 정상적으로 실행되고 있습니다.</p>
+
+    <div class="actions">
+      <button id="cta" type="button">클릭해 보세요</button>
+    </div>
+
+    <!-- 예약 알림 (앱 종료 상태에서도 수신) -->
+    <section class="push">
+      <h2>예약 알림</h2>
+      <p class="hint">앱을 꺼도 정해진 시간에 알림이 옵니다. 먼저 알림을 켜세요.</p>
+
+      <button id="enable-push" type="button">🔔 알림 켜기</button>
+
+      <div id="push-controls" hidden>
+        <div class="row">
+          <input id="minutes" type="number" min="1" value="5" inputmode="numeric" />
+          <span>분 뒤</span>
+          <button id="add-once" type="button">예약</button>
+        </div>
+        <button id="add-hourly" type="button">매 정시 알림 켜기</button>
+
+        <ul id="reminder-list" class="reminders"></ul>
+      </div>
+
+      <p id="status" class="status" role="status"></p>
+    </section>
+  </main>
+
+  <script src="config.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

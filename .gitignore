@@ -1,0 +1,33 @@
+# ── Claude / Serena 등 AI 도구 (로컬 전용 — 개인정보 포함 가능, git 제외) ──
+.serena/
+.claude/
+CLAUDE.local.md
+.mcp.json
+
+# ── OS ──
+.DS_Store
+Thumbs.db
+
+# ── 에디터 ──
+.vscode/
+.idea/
+*.swp
+
+# ── 의존성 / 빌드 산출물 (각 웹앱 하위 폴더 공통) ──
+**/node_modules/
+**/dist/
+**/build/
+**/.next/
+**/.cache/
+**/coverage/
+
+# ── Cloudflare Wrangler ──
+**/.wrangler/
+**/.dev.vars
+
+# ── 로그 / 환경변수 ──
+*.log
+npm-debug.log*
+.env
+.env.local
+.env.*.local

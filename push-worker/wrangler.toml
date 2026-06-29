@@ -1,0 +1,18 @@
+name = "myapp-push"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# 매 1분마다 예약 확인 → 도래한 알림 발송
+[triggers]
+crons = ["* * * * *"]
+
+# VAPID 발송자 연락처. mailto: 또는 https: URL 가능. (개인 이메일 노출을 피해 공개 URL 사용)
+[vars]
+VAPID_SUBJECT = "https://longline-stunitas.github.io/WebApps/"
+
+# D1 데이터베이스: `wrangler d1 create myapp-reminders` 후 출력된 database_id를 채우세요.
+[[d1_databases]]
+binding = "DB"
+database_name = "myapp-reminders"
+database_id = "6b3f5c0c-000f-4b1b-ab66-6a3b35bcd6a7"
