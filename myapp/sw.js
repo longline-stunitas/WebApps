@@ -1,7 +1,7 @@
 // myapp service worker
 // 1) 설치 가능(PWA) 요건 충족  2) 알림(local push)을 표시하는 주체
 
-const CACHE = "myapp-v2";
+const CACHE = "myapp-v3";
 const ASSETS = [
   "./",
   "./index.html",
@@ -27,27 +27,34 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// 네트워크 우선(network-first): 온라인이면 항상 최신을 받고 캐시를 갱신,
+// 오프라인이면 캐시로 폴백. → 화면 수정이 앱 재실행만으로 즉시 반영됨.
 self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  );
-});
+  const req = event.request;
+  const url = new URL(req.url);
+  // 동일 출처 GET만 처리 (Worker API 등 교차 출처 요청은 그대로 통과)
+  if (req.method !== "GET" || url.origin !== self.location.origin) return;
 
-// 페이지에서 보낸 메시지로 알림을 띄운다 (예약/지연 포함)
-self.addEventListener("message", (event) => {
-  const data = event.data || {};
-  if (data.type === "notify") {
-    const delay = Math.max(0, data.delay || 0);
-    const show = () =>
-      self.registration.showNotification(data.title || "myapp", {
-        body: data.body || "",
-        icon: "./icons/icon-192.png",
-        badge: "./icons/icon-192.png",
-        tag: "myapp-local",
-      });
-    // 주의: iOS에서는 앱이 백그라운드/종료 상태이면 이 타이머가 동작하지 않을 수 있음
-    event.waitUntil(delay ? new Promise((r) => setTimeout(() => show().then(r), delay)) : show());
-  }
+  event.respondWith(
+    (async () => {
+      try {
+        const fresh = await fetch(req);
+        if (fresh && fresh.ok) {
+          const cache = await caches.open(CACHE);
+          cache.put(req, fresh.clone());
+        }
+        return fresh;
+      } catch (e) {
+        const cached = await caches.match(req);
+        if (cached) return cached;
+        if (req.mode === "navigate") {
+          const idx = await caches.match("./index.html");
+          if (idx) return idx;
+        }
+        throw e;
+      }
+    })()
+  );
 });
 
 // 서버(Cloudflare Worker)가 보낸 Web Push 수신 → 앱이 종료돼 있어도 동작
