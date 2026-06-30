@@ -49,6 +49,8 @@ body {
   min-height: 0;
   overflow-y: auto;
   -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  scroll-padding-top: 5.5rem; /* sticky 상단이 맨 위로 이동한 항목을 가리지 않도록 */
   width: 100%;
   max-width: 640px;
   margin: 0 auto;

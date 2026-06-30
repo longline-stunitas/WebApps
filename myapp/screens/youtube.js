@@ -266,9 +266,11 @@ export function mount(root) {
   }
   function doMove(kind) {
     if (kind === "__recent") return scrollToRecent();
-    // 스크롤 컨테이너는 #app(=root)
-    if (kind === "__top") root.scrollTo({ top: 0, behavior: "smooth" });
-    if (kind === "__bottom") root.scrollTo({ top: root.scrollHeight, behavior: "smooth" });
+    // 최근본곳과 동일하게 scrollIntoView 사용(iOS에서 scrollTo가 안 먹는 문제 회피)
+    const cards = listEl.querySelectorAll(".yt-card");
+    if (!cards.length) return;
+    if (kind === "__top") cards[0].scrollIntoView({ block: "start", behavior: "smooth" });
+    if (kind === "__bottom") cards[cards.length - 1].scrollIntoView({ block: "end", behavior: "smooth" });
   }
 
   const editBtn = el("button", { className: "mini", textContent: "목록편집", onclick: openModal });
