@@ -66,6 +66,8 @@ const SORTS = [
   { key: "reverse", label: "역순" },
   { key: "important", label: "중요 먼저" },
   { key: "viewCount", label: "많이 본 순" },
+  { key: "duration", label: "시간순" },
+  { key: "durationDesc", label: "시간역순" },
   { key: "title", label: "제목순" },
   { key: "memo", label: "메모 먼저" },
 ];
@@ -112,6 +114,23 @@ function fmtDuration(iso) {
   return h > 0 ? `${h}:${pad(mi)}:${pad(s)}` : `${mi}:${pad(s)}`;
 }
 
+// ISO8601 duration → 총 초. 없으면 -1.
+function durationSec(iso) {
+  if (!iso) return -1;
+  const m = String(iso).match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return -1;
+  return (+(m[1] || 0)) * 3600 + (+(m[2] || 0)) * 60 + (+(m[3] || 0));
+}
+
+// 시간 비교: 길이 없는 항목은 항상 뒤로
+function durCompare(x, y, desc) {
+  const sx = durationSec(x.duration), sy = durationSec(y.duration);
+  if (sx < 0 && sy < 0) return 0;
+  if (sx < 0) return 1;
+  if (sy < 0) return -1;
+  return desc ? sy - sx : sx - sy;
+}
+
 // 표시용 정렬(저장 순서는 바꾸지 않음)
 function sortVideos(items, kind) {
   const a = items.slice();
@@ -119,6 +138,8 @@ function sortVideos(items, kind) {
     case "reverse": return a.reverse();
     case "important": return a.sort((x, y) => (y.important ? 1 : 0) - (x.important ? 1 : 0));
     case "viewCount": return a.sort((x, y) => y.showCount - x.showCount);
+    case "duration": return a.sort((x, y) => durCompare(x, y, false));     // 짧은 영상 먼저
+    case "durationDesc": return a.sort((x, y) => durCompare(x, y, true));  // 긴 영상 먼저
     case "title": return a.sort((x, y) => (x.title || "").localeCompare(y.title || "", "ko"));
     case "memo": return a.sort((x, y) => (y.memo ? 1 : 0) - (x.memo ? 1 : 0));
     default: return a; // normal
