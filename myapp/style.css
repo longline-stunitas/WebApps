@@ -72,6 +72,7 @@ button { cursor: pointer; transition: transform 0.1s ease, opacity 0.2s ease; }
 button:active { transform: scale(0.97); }
 
 .hint { color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem; line-height: 1.5; }
+.ver-tag { color: var(--muted); font-size: 0.75rem; text-align: center; margin-top: 1.5rem; opacity: 0.6; }
 .sec { font-size: 0.95rem; color: var(--muted); margin: 1.4rem 0 0.6rem; }
 .empty { color: var(--muted); text-align: center; padding: 1rem; font-size: 0.9rem; }
 

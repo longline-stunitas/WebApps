@@ -7,4 +7,8 @@ window.PUSH_CONFIG = {
   // VAPID 공개키 (브라우저 구독용 — 공개되어도 되는 값)
   VAPID_PUBLIC_KEY:
     "BJstt43ik_X2g59-2DSFG5sWijz5f9oAXFnZn8nFSpgjFxssPrv4B1wBKy_D8CGybFPtU1BhpqzXKFDPfTB3PYk",
+
+  // 배포 버전 — 메뉴 화면 하단에 표시. 배포(코드 변경)할 때마다 sw.js의 CACHE와 함께 올린다.
+  // 폰에서 이 숫자가 바뀌면 새 버전이 반영된 것.
+  APP_VERSION: "v30",
 };

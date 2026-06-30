@@ -44,6 +44,10 @@ export function mount(root) {
       list.appendChild(el("div", { className: "menu-item" }, [go, star]));
     }
     root.appendChild(list);
+
+    // 배포 버전 표시 — 폰에서 이 숫자로 반영 여부를 확인.
+    const ver = (window.PUSH_CONFIG && window.PUSH_CONFIG.APP_VERSION) || "?";
+    root.appendChild(el("p", { className: "ver-tag" }, `버전 ${ver}`));
   }
 
   draw();
