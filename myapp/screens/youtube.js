@@ -93,12 +93,23 @@ function normVideo(it, base = {}) {
     title: it.title,
     thumbnail: it.thumbnail ?? null,
     position: it.position ?? null,
+    duration: it.duration ?? base.duration ?? null, // ISO8601 (예: PT5M30S)
     important: base.important ?? false,
     showCount: base.showCount ?? 0,
     memo: base.memo ?? "",
     createDate: base.createDate ?? null, // 값 있으면 NEW
     lastShowTime: base.lastShowTime ?? null,
   };
+}
+
+// ISO8601 duration → "H:MM:SS" / "M:SS"
+function fmtDuration(iso) {
+  if (!iso) return "";
+  const m = String(iso).match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!m) return "";
+  const h = +(m[1] || 0), mi = +(m[2] || 0), s = +(m[3] || 0);
+  const pad = (n) => String(n).padStart(2, "0");
+  return h > 0 ? `${h}:${pad(mi)}:${pad(s)}` : `${mi}:${pad(s)}`;
 }
 
 // 표시용 정렬(저장 순서는 바꾸지 않음)
@@ -307,6 +318,7 @@ export function mount(root) {
     v.memo = text.trim();
     persist();
     setStatus("메모를 저장했습니다.");
+    renderList(); // 메모 표시 갱신(펼침 유지)
   }
 
   function scrollToRecent() {
@@ -340,15 +352,24 @@ export function mount(root) {
 
       if (showThumb && v.thumbnail) head.appendChild(el("img", { className: "yt-thumb", src: v.thumbnail, loading: "lazy", alt: "" }));
 
-      const badges = el("span", { className: "yt-badges" }, [
-        v.createDate ? el("span", { className: "badge new" }, "NEW") : null,
-        v.important ? el("span", { className: "badge imp" }, "★") : null,
-        isRecent ? el("span", { className: "badge recent" }, "최근") : null,
-        v.showCount > 0 ? el("span", { className: "badge cnt" }, `${v.showCount}회`) : null,
-      ]);
-      head.appendChild(el("span", { className: "yt-vtitle" }, [el("span", {}, v.title), badges]));
+      // 썸네일 오른쪽(상단): 제목 + 영상시간. 시간은 다른 메타가 없어도 항상 표시.
+      const body = el("div", { className: "yt-body" }, [el("span", { className: "yt-vtitle" }, v.title)]);
+      const dur = fmtDuration(v.duration);
+      if (dur) body.appendChild(el("span", { className: "yt-time" }, dur));
+      head.appendChild(body);
 
       const card = el("div", { className: "yt-card" + (isRecent ? " recent" : "") }, [head]);
+
+      // 썸네일 아래(전체 너비): NEW·최근·별표·N회 + 메모. 내용 없으면 영역 자체를 안 만든다.
+      const meta = [];
+      if (v.createDate) meta.push(el("span", { className: "badge new" }, "NEW"));
+      if (isRecent) meta.push(el("span", { className: "badge recent" }, "최근"));
+      if (v.important) meta.push(el("span", { className: "badge imp" }, "★"));
+      if (v.showCount > 0) meta.push(el("span", { className: "badge cnt" }, `${v.showCount}회`));
+      const foot = el("div", { className: "yt-foot" });
+      if (meta.length) foot.appendChild(el("div", { className: "yt-meta" }, meta));
+      if (v.memo) foot.appendChild(el("div", { className: "yt-memo-view" }, v.memo));
+      if (foot.childNodes.length) card.appendChild(foot);
 
       if (expandedId === v.videoId) {
         const memo = el("textarea", { className: "yt-memo", placeholder: "메모…", value: v.memo || "", rows: 2 });

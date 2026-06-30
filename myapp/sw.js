@@ -1,7 +1,7 @@
 // myapp service worker
 // 1) 설치 가능(PWA) 요건 충족  2) 서버 푸시 알림 표시  3) network-first 캐싱
 
-const CACHE = "myapp-v6";
+const CACHE = "myapp-v8";
 const ASSETS = [
   "./",
   "./index.html",
