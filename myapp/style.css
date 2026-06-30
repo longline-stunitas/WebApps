@@ -236,6 +236,21 @@ button:active { transform: scale(0.97); }
   border-top: 1px solid var(--line);
 }
 .wv-frame-bar .btn-line { margin-top: 0; flex: 1; }
+.wv-frame-toast {
+  position: absolute;
+  left: 50%;
+  bottom: 4.5rem;
+  transform: translateX(-50%);
+  max-width: 80%;
+  background: rgba(0, 0, 0, 0.85);
+  color: #fff;
+  padding: 0.55rem 1rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  text-align: center;
+  z-index: 1;
+  pointer-events: none;
+}
 
 /* ── 모달(팝업) ── */
 .modal {

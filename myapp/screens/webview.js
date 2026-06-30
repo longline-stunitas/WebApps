@@ -115,21 +115,31 @@ export function mount(root) {
     if (!it.urlString) return;
     const startUrl = it.urlString;
     const iframe = el("iframe", { className: "wv-frame", src: startUrl });
+    // iframe 전체화면이 하단 상태줄을 가리므로, 오버레이 안에 직접 토스트로 알림.
+    function frameToast(msg) {
+      const t = el("div", { className: "wv-frame-toast", textContent: msg });
+      overlay.appendChild(t);
+      setTimeout(() => t.remove(), 1600);
+    }
     const addBtn = el("button", { className: "btn-line", textContent: "＋ 즐겨찾기", onclick: () => {
       const url = frameCurrentUrl(iframe, startUrl);
+      if (items.some((x) => x.urlString === url)) { frameToast("이미 추가된 페이지입니다"); return; }
       const title = frameAutoTitle(iframe, url);
       items.push({ identifier: uid(), title, urlString: url }); // 제목은 자동
       save(items);
       render();
-      setStatus(`'${title}' 추가됨`);
+      frameToast(`✓ '${title}' 즐겨찾기에 추가됨`);
     } });
-    const backBtn = el("button", { className: "btn-line", textContent: "‹ 이전", onclick: () => {
-      try { iframe.contentWindow.history.back(); } catch { setStatus("외부 사이트는 이전 이동이 제한됩니다."); }
+    // iframe 뒤로가기는 탭 전체 history를 공유해 불안정(부모 앱 영향)하므로,
+    // history를 건드리지 않고 '처음 연 주소로 다시 로드'한다. 외부 사이트에서도 안전.
+    const homeBtn = el("button", { className: "btn-line", textContent: "↻ 처음으로", onclick: () => {
+      iframe.src = startUrl;
+      frameToast("처음 페이지로 돌아왔습니다.");
     } });
     const closeBtn = el("button", { className: "btn-line", textContent: "닫기", onclick: () => overlay.remove() });
     const overlay = el("div", { className: "wv-frame-overlay" }, [
       iframe,
-      el("div", { className: "wv-frame-bar" }, [addBtn, backBtn, closeBtn]),
+      el("div", { className: "wv-frame-bar" }, [addBtn, homeBtn, closeBtn]),
     ]);
     document.body.appendChild(overlay);
   }
