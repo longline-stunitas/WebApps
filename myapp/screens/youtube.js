@@ -1,7 +1,7 @@
 // 유튜브 강좌 타이틀리스트 — 원본 VideoRecord 화면을 PWA로 재현.
 // 재생목록 관리 + worker 프록시 영상 로드 + 증분 새로고침 + 정렬 + 영상별 상태(중요/시청횟수/메모/NEW).
 import { get, set, remove } from "../lib/store.js";
-import { el, setStatus } from "../lib/ui.js";
+import { el, setStatus, confirmDialog } from "../lib/ui.js";
 import { fetchYoutubePlaylist } from "../lib/push.js";
 
 export const title = "유튜브 강좌";
@@ -160,34 +160,36 @@ export function mount(root) {
   let sortKind = get(SORT_KEY, "normal");
   let data = null;        // 현재 재생목록의 { items, hiddenCount, ts, lastShowVideoId }
   let expandedId = null;  // 펼친 영상 videoId
-  let editingId = null;   // 재생목록 폼이 편집 중인 id
+  let editingId = null;       // 재생목록 폼이 편집 중인 id
+  let returnToEditId = null;  // 신규 모드에서 취소 시 되돌아갈 편집 대상 id
 
   // ── 재생목록 추가/편집 모달(팝업) ──
   const mTitle = el("input", { type: "text", placeholder: "재생목록 제목" });
   const mId = el("input", { type: "text", placeholder: "재생목록 ID (PL... 형식)" });
   const mHeading = el("h3", { className: "modal-title" }, "재생목록 추가");
   const mSave = el("button", { className: "btn-line", textContent: "저장", onclick: onSavePlaylist });
-  const mCancel = el("button", { className: "btn-line", textContent: "취소", onclick: closeModal });
+  const mCancel = el("button", { className: "btn-line", textContent: "취소", onclick: onCancel });
+  const mNew = el("button", { className: "btn-line", textContent: "＋ 새 재생목록 추가", onclick: () => { returnToEditId = editingId; setModalMode(null); } });
+  const mClearNew = el("button", { className: "btn-line", textContent: "이 목록 NEW 모두 지우기", onclick: clearAllNew });
   const mDelete = el("button", { className: "btn-line danger", textContent: "이 재생목록 삭제", onclick: onDeletePlaylist });
   const modalCard = el("div", { className: "modal-card" }, [
     mHeading, mTitle, mId,
     el("div", { className: "att-actions" }, [mCancel, mSave]),
-    mDelete,
+    mNew, mClearNew, mDelete,
   ]);
   const modal = el("div", {
     className: "modal", hidden: true,
     onclick: (e) => { if (e.target === modal) closeModal(); }, // 바깥(딤) 탭 시 닫기
   }, [modalCard]);
 
-  function openModal(editMode) {
-    if (editMode) {
-      const p = playlists.find((x) => x.id === currentId);
-      if (!p) return setStatus("선택된 재생목록이 없습니다.");
-      editingId = p.id;
+  // editP가 있으면 편집 모드, 없으면(null) 신규 추가 모드. (한 모달 안에서 전환)
+  function setModalMode(editP) {
+    if (editP) {
+      editingId = editP.id;
       mHeading.textContent = "재생목록 편집";
       mSave.textContent = "수정 적용";
-      mTitle.value = p.title;
-      mId.value = p.id;
+      mTitle.value = editP.title;
+      mId.value = editP.id;
     } else {
       editingId = null;
       mHeading.textContent = "재생목록 추가";
@@ -195,11 +197,45 @@ export function mount(root) {
       mTitle.value = "";
       mId.value = "";
     }
-    mDelete.hidden = !editMode; // 삭제는 편집 모드에서만
-    modal.hidden = false;
+    const editing = !!editP;
+    mNew.hidden = !editing;       // 신규 추가로 전환(편집 중일 때만)
+    mClearNew.hidden = !editing;  // NEW 일괄 해제(편집 중일 때만)
+    mDelete.hidden = !editing;    // 삭제(편집 중일 때만)
     mTitle.focus();
   }
-  function closeModal() { modal.hidden = true; }
+  // 목록편집 진입: 현재 선택 목록이 있으면 편집, 없으면 신규 추가로 연다.
+  function openModal() {
+    returnToEditId = null;
+    const p = playlists.find((x) => x.id === currentId);
+    setModalMode(p || null);
+    modal.hidden = false;
+  }
+  // 취소: 신규 모드로 전환해온 경우 편집 모드로 복귀, 아니면 닫기.
+  function onCancel() {
+    if (returnToEditId) {
+      const p = playlists.find((x) => x.id === returnToEditId);
+      returnToEditId = null;
+      if (p) { setModalMode(p); return; }
+    }
+    closeModal();
+  }
+  function closeModal() { returnToEditId = null; modal.hidden = true; }
+
+  // 현재(편집 중) 재생목록의 모든 영상 NEW 표시 일괄 해제
+  async function clearAllNew() {
+    if (!editingId) return;
+    const d = get(vidKey(editingId), null);
+    if (!d || !d.items || !d.items.length) return setStatus("영상이 없습니다.");
+    if (!(await confirmDialog("이 목록의 NEW 표시를 모두 지울까요?"))) return;
+    let changed = 0;
+    for (const v of d.items) if (v.createDate) { v.createDate = null; changed++; }
+    set(vidKey(editingId), d);
+    if (editingId === currentId) data = d;
+    closeModal();
+    renderSelect();
+    renderList();
+    setStatus(changed ? `NEW 표시 ${changed}개를 지웠습니다.` : "지울 NEW가 없습니다.");
+  }
 
   // ── 상단 툴바 ──
   const select = el("select", { className: "yt-select", onchange: () => selectPlaylist(select.value) });
@@ -227,14 +263,15 @@ export function mount(root) {
     if (kind === "__bottom") window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
   }
 
-  const addBtn = el("button", { className: "mini", textContent: "＋ 추가", onclick: () => openModal(false) });
-  const refreshBtn = el("button", { className: "mini", textContent: "↻ 갱신", onclick: () => loadVideos(currentId, true) });
-  const allBtn = el("button", { className: "mini", textContent: "⟳ 전체갱신", onclick: refreshAll });
+  const editBtn = el("button", { className: "mini", textContent: "목록편집", onclick: openModal });
+  const refreshBtn = el("button", { className: "mini", textContent: "↻ 갱신",
+    onclick: async () => { if (currentId && await confirmDialog("현재 재생목록을 갱신할까요?")) loadVideos(currentId, true); } });
+  const allBtn = el("button", { className: "mini", textContent: "⟳ 전체갱신",
+    onclick: async () => { if (await confirmDialog("등록된 모든 재생목록을 갱신할까요?\n개수가 많으면 시간이 걸립니다.")) refreshAll(); } });
   const thumbBtn = el("button", { className: "mini", onclick: toggleThumb });
-  const editBtn = el("button", { className: "mini", textContent: "목록편집", onclick: () => openModal(true) });
 
   const topRow = el("div", { className: "yt-top" }, [select, sortSelect]);
-  const toolRow = el("div", { className: "yt-tools" }, [addBtn, refreshBtn, allBtn, thumbBtn, editBtn]);
+  const toolRow = el("div", { className: "yt-tools" }, [editBtn, refreshBtn, allBtn, thumbBtn]);
 
   const summaryEl = el("div", { className: "yt-summary" });
   const listEl = el("div", { className: "yt-list" });
@@ -270,8 +307,9 @@ export function mount(root) {
     loadVideos(currentId, false);
     setStatus("저장되었습니다.");
   }
-  function onDeletePlaylist() {
+  async function onDeletePlaylist() {
     if (!editingId) return;
+    if (!(await confirmDialog("이 재생목록을 삭제할까요?", { okText: "삭제", danger: true }))) return;
     playlists = playlists.filter((x) => x.id !== editingId);
     remove(vidKey(editingId));
     savePlaylists(playlists);
@@ -290,15 +328,17 @@ export function mount(root) {
     renderList();
   }
 
-  // 재생목록 옵션 뒤 부가표시: [영상수] 감춤n NEWn
-  function playlistMetaText(id) {
-    const d = get(vidKey(id), null);
-    if (!d || !d.items) return "";
+  // 재생목록 옵션 텍스트: 갱신(NEW)된 목록은 🔴 + "NEW n"으로 구분.
+  // (iOS의 <select>는 옵션 글자 색 지정이 막혀 있어, 빨간 점 이모지로 강조)
+  function optionText(p) {
+    const d = get(vidKey(p.id), null);
+    if (!d || !d.items) return p.title;
     let s = ` [${d.items.length}]`;
     if (d.hiddenCount) s += ` 감춤${d.hiddenCount}`;
     const n = d.items.filter((v) => v.createDate).length;
-    if (n) s += ` NEW${n}`;
-    return s;
+    const prefix = n ? "🔴 " : "";
+    if (n) s += ` NEW ${n}`;
+    return prefix + p.title + s;
   }
   function renderSelect() {
     select.innerHTML = "";
@@ -308,7 +348,7 @@ export function mount(root) {
       return;
     }
     for (const p of playlists) {
-      select.appendChild(el("option", { value: p.id, textContent: p.title + playlistMetaText(p.id) }));
+      select.appendChild(el("option", { value: p.id, textContent: optionText(p) }));
     }
     if (!currentId || !playlists.some((x) => x.id === currentId)) currentId = playlists[0].id;
     select.value = currentId;

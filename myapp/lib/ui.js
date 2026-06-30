@@ -33,3 +33,22 @@ export function fmtRemain(ms) {
 export function fmtTime(epochMs) {
   return new Date(epochMs).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" });
 }
+
+// 확인 레이어. Promise<boolean> 반환(확인=true / 취소·바깥탭=false).
+// opts: { okText, cancelText, danger }
+export function confirmDialog(message, opts = {}) {
+  return new Promise((resolve) => {
+    const okBtn = el("button", { className: "btn-line" + (opts.danger ? " danger" : ""), textContent: opts.okText || "확인" });
+    const cancelBtn = el("button", { className: "btn-line", textContent: opts.cancelText || "취소" });
+    const card = el("div", { className: "modal-card" }, [
+      el("p", { className: "confirm-msg" }, message),
+      el("div", { className: "att-actions" }, [cancelBtn, okBtn]),
+    ]);
+    const layer = el("div", { className: "modal confirm" }, [card]);
+    const close = (val) => { layer.remove(); resolve(val); };
+    okBtn.onclick = () => close(true);
+    cancelBtn.onclick = () => close(false);
+    layer.onclick = (e) => { if (e.target === layer) close(false); };
+    document.body.appendChild(layer);
+  });
+}

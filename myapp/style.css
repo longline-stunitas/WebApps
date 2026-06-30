@@ -230,6 +230,8 @@ button:active { transform: scale(0.97); }
   background: rgba(0, 0, 0, 0.55);
 }
 .modal[hidden] { display: none; }
+.modal.confirm { z-index: 60; } /* 편집 모달 위에 표시 */
+.confirm-msg { font-size: 0.95rem; line-height: 1.5; white-space: pre-line; }
 .modal-card {
   width: 100%;
   max-width: 360px;
