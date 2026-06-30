@@ -39,8 +39,9 @@ function render() {
 backBtn.addEventListener("click", () => { location.hash = "#/menu"; });
 window.addEventListener("hashchange", render);
 
-window.addEventListener("load", async () => {
-  try { await registerSW(); } catch {}
+window.addEventListener("load", () => {
+  // SW 등록은 백그라운드로 (첫 화면 렌더를 막지 않음). 푸시 사용 시 enablePush가 등록을 보장.
+  registerSW().catch(() => {});
 
   // 해시 없이 처음 열렸을 때만 "첫 화면 설정" 적용
   if (!location.hash) {
