@@ -266,8 +266,9 @@ export function mount(root) {
   }
   function doMove(kind) {
     if (kind === "__recent") return scrollToRecent();
-    if (kind === "__top") window.scrollTo({ top: 0, behavior: "smooth" });
-    if (kind === "__bottom") window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+    // 스크롤 컨테이너는 #app(=root)
+    if (kind === "__top") root.scrollTo({ top: 0, behavior: "smooth" });
+    if (kind === "__bottom") root.scrollTo({ top: root.scrollHeight, behavior: "smooth" });
   }
 
   const editBtn = el("button", { className: "mini", textContent: "목록편집", onclick: openModal });
