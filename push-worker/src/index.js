@@ -125,15 +125,18 @@ export default {
           for (const it of data.items ?? []) {
             const sn = it.snippet ?? {};
             const vid = sn.resourceId?.videoId;
-            // private/deleted 영상은 videoId가 없음 → 제외하고 카운트만
-            if (!vid) {
+            const thumb = sn.thumbnails?.default?.url ?? null;
+            const t = sn.title ?? "";
+            // private/deleted: videoId 없음 / 썸네일 없음 / 제목이 Private·Deleted video
+            // → 영상 리스트·NEW에서 제외하고 hiddenCount(감춤 수)만 증가
+            if (!vid || !thumb || t === "Private video" || t === "Deleted video") {
               hiddenCount += 1;
               continue;
             }
             items.push({
               videoId: vid,
-              title: sn.title ?? "",
-              thumbnail: sn.thumbnails?.default?.url ?? null,
+              title: t,
+              thumbnail: thumb,
               position: sn.position ?? null,
             });
           }

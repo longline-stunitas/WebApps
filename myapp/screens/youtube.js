@@ -239,7 +239,7 @@ export function mount(root) {
 
   // ── 상단: 재생목록 선택 + 정렬 (커스텀 선택 시트 — iOS 기본 select 대체) ──
   const plBtn = el("button", { className: "yt-picker pl", onclick: openPlaylistSheet });
-  const sortBtn = el("button", { className: "yt-picker sort", onclick: openSortSheet });
+  const sortBtn = el("button", { className: "mini yt-sortbtn", onclick: openSortSheet });
 
   async function openPlaylistSheet() {
     if (!playlists.length) return setStatus("재생목록을 추가하세요.");
@@ -277,8 +277,8 @@ export function mount(root) {
     onclick: async () => { if (await confirmDialog("등록된 모든 재생목록을 갱신할까요?\n개수가 많으면 시간이 걸립니다.")) refreshAll(); } });
   const thumbBtn = el("button", { className: "mini", onclick: toggleThumb });
 
-  const topRow = el("div", { className: "yt-top" }, [plBtn, sortBtn]);
-  const toolRow = el("div", { className: "yt-tools" }, [editBtn, refreshBtn, allBtn, thumbBtn]);
+  const topRow = el("div", { className: "yt-top" }, [plBtn]);
+  const toolRow = el("div", { className: "yt-tools" }, [editBtn, refreshBtn, allBtn, thumbBtn, sortBtn]);
 
   const summaryEl = el("div", { className: "yt-summary" });
   const listEl = el("div", { className: "yt-list" });
@@ -441,27 +441,45 @@ export function mount(root) {
   // ── 영상별 동작 ──
   function persist() { if (currentId && data) set(vidKey(currentId), data); }
 
+  // 영상에 손대면 '최근 본 곳'을 그 영상으로 (재생·횟수·중요·메모 공통)
+  function touch(v) { if (data) data.lastShowVideoId = v.videoId; }
+
+  // 유튜브 앱이 있으면 앱으로 바로 열어 인앱 빈 화면을 피하고, 없으면 웹으로 폴백.
+  function openYoutube(videoId) {
+    const fallback = setTimeout(() => {
+      cleanup();
+      window.open(`https://www.youtube.com/watch?v=${videoId}`, "_blank");
+    }, 800);
+    const cleanup = () => { clearTimeout(fallback); document.removeEventListener("visibilitychange", onHide); };
+    const onHide = () => { if (document.hidden) cleanup(); }; // 앱으로 전환되면 폴백 취소
+    document.addEventListener("visibilitychange", onHide);
+    window.location.href = `youtube://watch?v=${videoId}`;
+  }
+
   function play(v) {
     v.showCount += 1;
     v.lastShowTime = nowISO();
     v.createDate = null; // 재생하면 NEW 해제
-    if (data) data.lastShowVideoId = v.videoId;
+    touch(v);
     persist();
-    window.open(`https://www.youtube.com/watch?v=${v.videoId}`, "_blank", "noopener");
     renderList();
+    openYoutube(v.videoId);
   }
   function changeCount(v, delta) {
     v.showCount = Math.max(0, v.showCount + delta);
+    touch(v);
     persist();
     renderList();
   }
   function toggleImportant(v) {
     v.important = !v.important;
+    touch(v);
     persist();
     renderList();
   }
   function saveMemo(v, text) {
     v.memo = text.trim();
+    touch(v);
     persist();
     setStatus("메모를 저장했습니다.");
     renderList(); // 메모 표시 갱신(펼침 유지)

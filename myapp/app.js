@@ -39,6 +39,9 @@ function render() {
 backBtn.addEventListener("click", () => { location.hash = "#/menu"; });
 window.addEventListener("hashchange", render);
 
+// iOS 핀치 줌 방지 (viewport·touch-action 보조)
+document.addEventListener("gesturestart", (e) => e.preventDefault());
+
 window.addEventListener("load", () => {
   // SW 등록은 백그라운드로 (첫 화면 렌더를 막지 않음). 푸시 사용 시 enablePush가 등록을 보장.
   registerSW().catch(() => {});

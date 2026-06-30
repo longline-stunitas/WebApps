@@ -17,6 +17,8 @@ body {
   color: var(--text);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   padding-bottom: env(safe-area-inset-bottom);
+  touch-action: pan-x pan-y; /* 핀치/더블탭 줌 방지, 스크롤은 허용 */
+  -webkit-text-size-adjust: 100%;
 }
 
 /* ── 상단바 ── */
@@ -290,6 +292,7 @@ button:active { transform: scale(0.97); }
 /* ── 유튜브 ── */
 .yt-top { display: flex; gap: 0.4rem; align-items: stretch; }
 .yt-tools { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
+.yt-sortbtn { margin-left: auto; } /* 정렬 버튼은 줄 오른쪽 끝에 */
 .yt-picker {
   text-align: left;
   padding: 0.6rem 0.7rem;
@@ -303,7 +306,6 @@ button:active { transform: scale(0.97); }
   text-overflow: ellipsis;
 }
 .yt-picker.pl { flex: 1; min-width: 0; }
-.yt-picker.sort { flex: 0 0 auto; }
 
 /* 커스텀 선택 시트 */
 .sheet-layer { animation: sheetFade 0.15s ease; }
@@ -321,15 +323,15 @@ button:active { transform: scale(0.97); }
 .sheet-group { font-size: 0.72rem; color: var(--muted); padding: 0.5rem 0.6rem 0.2rem; }
 .sheet-item {
   text-align: left;
-  padding: 0.65rem 0.7rem;
+  padding: 0.7rem;
   background: transparent;
   border: none;
   border-radius: 8px;
   color: var(--text);
   font-size: 0.9rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  line-height: 1.4;
+  white-space: normal;
+  word-break: break-word;
 }
 .sheet-item.on { background: var(--accent); color: var(--bg); font-weight: 600; }
 .sheet-item:active { background: var(--line); }
