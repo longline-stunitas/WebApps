@@ -52,3 +52,29 @@ export function confirmDialog(message, opts = {}) {
     document.body.appendChild(layer);
   });
 }
+
+// 선택 시트(커스텀 드롭다운 레이어 — iOS 기본 select 대체).
+// groups: [{ label?, items: [{ value, label }] }]. Promise<선택값 | null>.
+export function selectSheet(title, groups, current) {
+  return new Promise((resolve) => {
+    const list = el("div", { className: "sheet-list" });
+    const close = (val) => { layer.remove(); resolve(val); };
+    for (const g of groups) {
+      if (g.label) list.appendChild(el("div", { className: "sheet-group" }, g.label));
+      for (const it of g.items) {
+        list.appendChild(el("button", {
+          className: "sheet-item" + (it.value === current ? " on" : ""),
+          textContent: it.label,
+          onclick: () => close(it.value),
+        }));
+      }
+    }
+    const card = el("div", { className: "modal-card sheet" }, [
+      title ? el("h3", { className: "modal-title" }, title) : null,
+      list,
+    ]);
+    const layer = el("div", { className: "modal sheet-layer" }, [card]);
+    layer.onclick = (e) => { if (e.target === layer) close(null); };
+    document.body.appendChild(layer);
+  });
+}

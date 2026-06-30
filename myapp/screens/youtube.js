@@ -1,7 +1,7 @@
 // 유튜브 강좌 타이틀리스트 — 원본 VideoRecord 화면을 PWA로 재현.
 // 재생목록 관리 + worker 프록시 영상 로드 + 증분 새로고침 + 정렬 + 영상별 상태(중요/시청횟수/메모/NEW).
 import { get, set, remove } from "../lib/store.js";
-import { el, setStatus, confirmDialog } from "../lib/ui.js";
+import { el, setStatus, confirmDialog, selectSheet } from "../lib/ui.js";
 import { fetchYoutubePlaylist } from "../lib/push.js";
 
 export const title = "유튜브 강좌";
@@ -237,24 +237,31 @@ export function mount(root) {
     setStatus(changed ? `NEW 표시 ${changed}개를 지웠습니다.` : "지울 NEW가 없습니다.");
   }
 
-  // ── 상단 툴바 ──
-  const select = el("select", { className: "yt-select", onchange: () => selectPlaylist(select.value) });
+  // ── 상단: 재생목록 선택 + 정렬 (커스텀 선택 시트 — iOS 기본 select 대체) ──
+  const plBtn = el("button", { className: "yt-picker pl", onclick: openPlaylistSheet });
+  const sortBtn = el("button", { className: "yt-picker sort", onclick: openSortSheet });
 
-  // 정렬 + 이동(스크롤)을 한 드롭다운에. 이동은 '__' 접두어로 구분, 선택 시 일회성 동작 후 정렬값 복원.
-  const sortSelect = el("select", { className: "yt-select sort", onchange: onSortChange });
-  const gSort = el("optgroup", { label: "정렬" });
-  for (const s of SORTS) gSort.appendChild(el("option", { value: s.key, textContent: s.label }));
-  const gMove = el("optgroup", { label: "이동" });
-  for (const m of SORT_MOVES) gMove.appendChild(el("option", { value: m.key, textContent: m.label }));
-  sortSelect.appendChild(gSort);
-  sortSelect.appendChild(gMove);
-  sortSelect.value = sortKind;
-
-  function onSortChange() {
-    const v = sortSelect.value;
-    if (v.startsWith("__")) { doMove(v); sortSelect.value = sortKind; return; }
+  async function openPlaylistSheet() {
+    if (!playlists.length) return setStatus("재생목록을 추가하세요.");
+    const groups = [{ items: playlists.map((p) => ({ value: p.id, label: optionText(p) })) }];
+    const v = await selectSheet("재생목록 선택", groups, currentId);
+    if (v) selectPlaylist(v);
+  }
+  function renderSortBtn() {
+    const s = SORTS.find((x) => x.key === sortKind);
+    sortBtn.textContent = "정렬: " + (s ? s.label : "기본순");
+  }
+  async function openSortSheet() {
+    const groups = [
+      { label: "정렬", items: SORTS.map((s) => ({ value: s.key, label: s.label })) },
+      { label: "이동", items: SORT_MOVES.map((m) => ({ value: m.key, label: m.label })) },
+    ];
+    const v = await selectSheet("정렬 / 이동", groups, sortKind);
+    if (!v) return;
+    if (v.startsWith("__")) { doMove(v); return; }
     sortKind = v;
     set(SORT_KEY, sortKind);
+    renderSortBtn();
     renderList();
   }
   function doMove(kind) {
@@ -270,7 +277,7 @@ export function mount(root) {
     onclick: async () => { if (await confirmDialog("등록된 모든 재생목록을 갱신할까요?\n개수가 많으면 시간이 걸립니다.")) refreshAll(); } });
   const thumbBtn = el("button", { className: "mini", onclick: toggleThumb });
 
-  const topRow = el("div", { className: "yt-top" }, [select, sortSelect]);
+  const topRow = el("div", { className: "yt-top" }, [plBtn, sortBtn]);
   const toolRow = el("div", { className: "yt-tools" }, [editBtn, refreshBtn, allBtn, thumbBtn]);
 
   const summaryEl = el("div", { className: "yt-summary" });
@@ -341,17 +348,10 @@ export function mount(root) {
     return prefix + p.title + s;
   }
   function renderSelect() {
-    select.innerHTML = "";
-    if (!playlists.length) {
-      select.appendChild(el("option", { value: "", textContent: "재생목록을 추가하세요" }));
-      currentId = null;
-      return;
-    }
-    for (const p of playlists) {
-      select.appendChild(el("option", { value: p.id, textContent: optionText(p) }));
-    }
+    if (!playlists.length) { currentId = null; plBtn.textContent = "재생목록을 추가하세요"; return; }
     if (!currentId || !playlists.some((x) => x.id === currentId)) currentId = playlists[0].id;
-    select.value = currentId;
+    const p = playlists.find((x) => x.id === currentId);
+    plBtn.textContent = p ? optionText(p) : "재생목록 선택";
   }
 
   function selectPlaylist(id) {
@@ -359,6 +359,7 @@ export function mount(root) {
     currentId = id;
     expandedId = null;
     set(LAST_KEY, id);
+    renderSelect(); // 선택 버튼 텍스트 갱신
     loadVideos(id, false);
   }
 
@@ -408,15 +409,33 @@ export function mount(root) {
   // 전체 갱신: 모든 재생목록을 순회 조회. 각 목록의 신규 영상이 NEWn으로 표시된다.
   async function refreshAll() {
     if (!playlists.length) return setStatus("재생목록이 없습니다.");
-    let done = 0, totalNew = 0;
+    const total = playlists.length;
+
+    // 화면 중앙에 진행 상황 표시(현재 갱신 중인 재생목록 + 진행바)
+    const countEl = el("div", { className: "yt-progress-count" }, "");
+    const nameEl = el("div", { className: "yt-progress-name" }, "");
+    const fillEl = el("div", { className: "yt-progress-fill" });
+    summaryEl.textContent = "";
+    listEl.innerHTML = "";
+    listEl.appendChild(el("div", { className: "yt-progress" }, [
+      countEl, nameEl, el("div", { className: "yt-progress-bar" }, [fillEl]),
+    ]));
+
+    let done = 0, totalNew = 0, failed = 0;
     for (const p of playlists) {
-      setStatus(`전체 갱신 중… (${++done}/${playlists.length})`);
-      try { const { newCount } = await fetchAndStore(p.id); totalNew += newCount; } catch {}
+      done++;
+      countEl.textContent = `전체 갱신 중…  ${done} / ${total}`;
+      nameEl.textContent = p.title;
+      fillEl.style.width = Math.round((done / total) * 100) + "%";
+      setStatus(`전체 갱신 중… (${done}/${total})`);
+      await new Promise((r) => requestAnimationFrame(r)); // 화면 갱신 보장
+      try { const { newCount } = await fetchAndStore(p.id); totalNew += newCount; }
+      catch { failed++; }
     }
     data = currentId ? get(vidKey(currentId), null) : null;
     renderSelect();
     renderList();
-    setStatus(`전체 갱신 완료 · 신규 ${totalNew}개`);
+    setStatus(`전체 갱신 완료 · 신규 ${totalNew}개${failed ? ` · 실패 ${failed}` : ""}`);
   }
 
   // ── 영상별 동작 ──
@@ -540,6 +559,7 @@ export function mount(root) {
 
   // ── 초기화 ──
   thumbBtn.textContent = showThumb ? "썸네일 끄기" : "썸네일 켜기";
+  renderSortBtn();
   renderSelect();
   loadVideos(currentId, false);
 
