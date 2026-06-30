@@ -172,7 +172,7 @@ export function mount(root) {
   let playlists = loadPlaylists();
   let currentId = get(LAST_KEY, null);
   let showThumb = get(THUMB_KEY, true);
-  let sortKind = get(SORT_KEY, "normal");
+  let sortKind = "normal"; // 화면 진입 시 항상 기본순(이전 정렬을 유지하지 않음)
   let data = null;        // 현재 재생목록의 { items, hiddenCount, ts, lastShowVideoId }
   let expandedId = null;  // 펼친 영상 videoId
   let editingId = null;       // 재생목록 폼이 편집 중인 id
@@ -274,8 +274,7 @@ export function mount(root) {
     const v = await selectSheet("정렬 / 이동", groups, sortKind);
     if (!v) return;
     if (v.startsWith("__")) { doMove(v); return; }
-    sortKind = v;
-    set(SORT_KEY, sortKind);
+    sortKind = v; // 세션 중에만 유지(저장 안 함 → 다음 진입 시 기본순)
     renderSortBtn();
     renderList();
   }
@@ -571,7 +570,10 @@ export function mount(root) {
       const body = el("div", { className: "yt-body" }, [el("span", { className: "yt-vtitle" }, v.title)]);
       const dur = fmtDuration(v.duration);
       const date = fmtDate(v.published);
-      const meta1 = [dur, date].filter(Boolean).join("  ·  ");
+      const parts = [];
+      if (dur) parts.push(dur);
+      if (date) parts.push("등록일: " + date);
+      const meta1 = parts.join("  ·  ");
       if (meta1) body.appendChild(el("span", { className: "yt-time" }, meta1));
       head.appendChild(body);
 
