@@ -72,7 +72,20 @@ npx wrangler deploy
 | POST | `/api/reminders` | 예약 추가 (`{endpoint, type:'once', minutes}` 또는 `{endpoint, type:'hourly'}`) |
 | GET | `/api/reminders?endpoint=` | 예약 목록 |
 | DELETE | `/api/reminders?id=` | 예약 취소 |
+| GET | `/api/youtube/playlist?playlistId=` | 유튜브 재생목록 영상 목록(제목/videoId/썸네일). API 키는 secret으로 숨김 |
 | POST | `/api/test` | 즉시 테스트 발송 (`{endpoint}`) |
+
+> `once` 예약의 `fire_at`은 분 경계(:00초)로 올림 정렬되어 cron(매 1분)과 동기화됩니다. "최소 N분"을 보장하면서 도래 분에 즉시 발송됩니다(1분 granularity 안에서 최선의 정확도).
+
+## 유튜브 프록시 (선택)
+
+유튜브 강좌 타이틀리스트 화면을 쓰려면 **YouTube Data API v3 키**를 secret으로 등록하세요. (Google Cloud Console에서 발급, 클라이언트/문서/git에 절대 적지 말 것)
+
+```bash
+npx wrangler secret put YOUTUBE_API_KEY
+```
+
+미등록 시 해당 라우트는 503을 반환하고, 앱은 수동 입력으로 폴백합니다.
 
 ## 키 재발급
 
@@ -89,4 +102,7 @@ npx @pushforge/builder vapid
 ```bash
 npx wrangler dev          # 로컬 실행
 npx wrangler tail         # 배포본 실시간 로그 (cron/발송 디버깅)
+```
+
+> 코드 수정(once 정확도, youtube 라우트 등) 후에는 `npx wrangler deploy`로 재배포해야 반영됩니다.
 ```

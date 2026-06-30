@@ -1,13 +1,20 @@
 // myapp service worker
-// 1) 설치 가능(PWA) 요건 충족  2) 알림(local push)을 표시하는 주체
+// 1) 설치 가능(PWA) 요건 충족  2) 서버 푸시 알림 표시  3) network-first 캐싱
 
-const CACHE = "myapp-v3";
+const CACHE = "myapp-v4";
 const ASSETS = [
   "./",
   "./index.html",
   "./style.css",
-  "./script.js",
   "./config.js",
+  "./app.js",
+  "./lib/store.js",
+  "./lib/ui.js",
+  "./lib/push.js",
+  "./screens/menu.js",
+  "./screens/alarm.js",
+  "./screens/webview.js",
+  "./screens/youtube.js",
   "./manifest.json",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

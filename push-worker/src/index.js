@@ -53,7 +53,10 @@ export default {
         if (type === "once") {
           const minutes = Number(b.minutes);
           if (!minutes || minutes <= 0) return json({ error: "minutes required" }, 400);
-          fireAt = now + minutes * 60_000;
+          // 분 경계(:00초)로 올림 정렬 → cron(매 1분)이 도는 바로 그 순간 발송된다.
+          // now의 초 성분이 섞여 한 박자 더 밀리던 문제를 없애고, "최소 N분"은 보장한다.
+          // (cron granularity가 1분이라 이게 달성 가능한 최선의 정확도)
+          fireAt = Math.ceil((now + minutes * 60_000) / 60_000) * 60_000;
           recurrence = null;
           title = b.title || "알림";
           body = b.body || `${minutes}분 전에 요청한 알림입니다.`;
@@ -95,6 +98,49 @@ export default {
         if (!id) return json({ error: "id required" }, 400);
         await env.DB.prepare(`DELETE FROM reminders WHERE id = ?`).bind(id).run();
         return json({ ok: true });
+      }
+
+      // 유튜브 재생목록 영상 목록 프록시 (API 키는 secret으로 숨김 — 클라이언트에 노출 안 함)
+      if (path === "/api/youtube/playlist" && request.method === "GET") {
+        const playlistId = url.searchParams.get("playlistId");
+        if (!playlistId) return json({ error: "playlistId required" }, 400);
+        if (!env.YOUTUBE_API_KEY) return json({ error: "YOUTUBE_API_KEY not configured" }, 503);
+
+        const items = [];
+        let pageToken = "";
+        let hiddenCount = 0;
+        do {
+          const api = new URL("https://www.googleapis.com/youtube/v3/playlistItems");
+          api.searchParams.set("part", "snippet");
+          api.searchParams.set("maxResults", "50");
+          api.searchParams.set("playlistId", playlistId);
+          api.searchParams.set("key", env.YOUTUBE_API_KEY);
+          if (pageToken) api.searchParams.set("pageToken", pageToken);
+
+          const r = await fetch(api.toString());
+          if (!r.ok) {
+            return json({ error: `youtube ${r.status}`, detail: await r.text().catch(() => "") }, r.status);
+          }
+          const data = await r.json();
+          for (const it of data.items ?? []) {
+            const sn = it.snippet ?? {};
+            const vid = sn.resourceId?.videoId;
+            // private/deleted 영상은 videoId가 없음 → 제외하고 카운트만
+            if (!vid) {
+              hiddenCount += 1;
+              continue;
+            }
+            items.push({
+              videoId: vid,
+              title: sn.title ?? "",
+              thumbnail: sn.thumbnails?.default?.url ?? null,
+              position: sn.position ?? null,
+            });
+          }
+          pageToken = data.nextPageToken ?? "";
+        } while (pageToken);
+
+        return json({ items, hiddenCount });
       }
 
       // 즉시 테스트 발송
