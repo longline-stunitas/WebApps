@@ -175,6 +175,7 @@ export function mount(root) {
   let sortKind = "normal"; // 화면 진입 시 항상 기본순(이전 정렬을 유지하지 않음)
   let data = null;        // 현재 재생목록의 { items, hiddenCount, ts, lastShowVideoId }
   let expandedId = null;  // 펼친 영상 videoId
+  let scrollToExpanded = false; // 방금 펼친 경우 그 카드를 화면 안으로 스크롤
   let editingId = null;       // 재생목록 폼이 편집 중인 id
   let returnToEditId = null;  // 신규 모드에서 취소 시 되돌아갈 편집 대상 id
 
@@ -545,6 +546,7 @@ export function mount(root) {
     }
     const ordered = sortVideos(items, sortKind);
     const lastId = data?.lastShowVideoId;
+    let expandedNode = null;
 
     ordered.forEach((v) => {
       const isRecent = v.videoId === lastId;
@@ -553,6 +555,7 @@ export function mount(root) {
         onclick: () => {
           if (v.createDate) { v.createDate = null; persist(); } // 누르면 NEW 해제 + 재생목록 NEW수 반영
           expandedId = expandedId === v.videoId ? null : v.videoId;
+          scrollToExpanded = expandedId === v.videoId; // 펼칠 때만(접을 땐 X) 스크롤
           renderSelect();
           renderList();
         },
@@ -599,9 +602,17 @@ export function mount(root) {
           memo,
           el("button", { className: "mini", textContent: "메모 저장", onclick: () => saveMemo(v, memo.value) }),
         ]));
+        expandedNode = card;
       }
       listEl.appendChild(card);
     });
+
+    // 방금 펼친 카드가 화면 밖(특히 맨 아래 행)이면 안으로 스크롤. 이미 보이면 안 움직임.
+    if (scrollToExpanded && expandedNode) {
+      const node = expandedNode;
+      requestAnimationFrame(() => node.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+    }
+    scrollToExpanded = false;
   }
 
   // ── 초기화 ──
