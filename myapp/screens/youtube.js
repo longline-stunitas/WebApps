@@ -474,16 +474,10 @@ export function mount(root) {
   // 영상에 손대면 '최근 본 곳'을 그 영상으로 (재생·횟수·중요·메모 공통)
   function touch(v) { if (data) data.lastShowVideoId = v.videoId; }
 
-  // 유튜브 앱이 있으면 앱으로 바로 열어 인앱 빈 화면을 피하고, 없으면 웹으로 폴백.
+  // iOS 유니버설 링크: 설치돼 있으면 유튜브 앱의 해당 영상으로, 없으면 Safari로.
+  // youtube:// 스킴(앱 빈화면)·window.open(PWA 빈 창)을 모두 피한다.
   function openYoutube(videoId) {
-    const fallback = setTimeout(() => {
-      cleanup();
-      window.open(`https://www.youtube.com/watch?v=${videoId}`, "_blank");
-    }, 800);
-    const cleanup = () => { clearTimeout(fallback); document.removeEventListener("visibilitychange", onHide); };
-    const onHide = () => { if (document.hidden) cleanup(); }; // 앱으로 전환되면 폴백 취소
-    document.addEventListener("visibilitychange", onHide);
-    window.location.href = `youtube://watch?v=${videoId}`;
+    window.location.href = `https://www.youtube.com/watch?v=${videoId}`;
   }
 
   function play(v) {
