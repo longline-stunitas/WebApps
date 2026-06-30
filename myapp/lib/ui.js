@@ -1,8 +1,26 @@
 // 공통 UI 헬퍼 — 상태표시줄, 화면 이동, DOM 생성.
 
+// 화면 하단에 잠깐 떴다 사라지는 토스트. (이전 #status 바를 대체)
+let toastTimer = null;
+export function toast(msg) {
+  if (!msg) return;
+  let node = document.getElementById("toast");
+  if (!node) {
+    node = el("div", { id: "toast", className: "toast" });
+    document.body.appendChild(node);
+  }
+  node.textContent = msg;
+  // reflow를 거쳐 transition이 매번 동작하도록
+  node.classList.remove("show");
+  void node.offsetWidth;
+  node.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => node.classList.remove("show"), 2400);
+}
+
+// 하위호환: 기존 setStatus 호출을 토스트로 처리. 빈 문자열("")은 무시(화면 전환 클리어용이었음).
 export function setStatus(msg) {
-  const node = document.getElementById("status");
-  if (node) node.textContent = msg || "";
+  if (msg) toast(msg);
 }
 
 export function navigate(name) {

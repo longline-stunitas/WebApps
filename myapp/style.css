@@ -55,19 +55,30 @@ body {
   width: 100%;
   max-width: 640px;
   margin: 0 auto;
-  padding: 1rem;
+  padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom)); /* 하단 safe-area까지 리스트 확장 */
 }
 
-.status {
-  flex-shrink: 0;
-  max-width: 640px;
-  width: 100%;
-  margin: 0 auto;
-  padding: 0.4rem 1rem calc(0.4rem + env(safe-area-inset-bottom));
-  min-height: 1.2em;
-  font-size: 0.85rem;
-  color: var(--muted);
+/* 토스트 — 하단 중앙에 잠깐 떴다 사라짐 (이전 하단 상태바 대체) */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(1.4rem + env(safe-area-inset-bottom));
+  transform: translateX(-50%) translateY(0.5rem);
+  max-width: calc(100% - 2rem);
+  padding: 0.6rem 1.1rem;
+  background: rgba(20, 20, 22, 0.92);
+  color: #fff;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  font-size: 0.88rem;
+  line-height: 1.35;
+  text-align: center;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
 }
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
 button { cursor: pointer; transition: transform 0.1s ease, opacity 0.2s ease; }
 button:active { transform: scale(0.97); }
