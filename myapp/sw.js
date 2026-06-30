@@ -1,7 +1,8 @@
 // myapp service worker
 // 1) 설치 가능(PWA) 요건 충족  2) 서버 푸시 알림 표시  3) network-first 캐싱
 
-const CACHE = "myapp-v24";
+const CACHE = "myapp-v25";
+const IMG_CACHE = "myapp-thumbs"; // 유튜브 썸네일 — 앱 버전과 무관하게 유지(네트워크 최소화)
 const ASSETS = [
   "./",
   "./index.html",
@@ -28,7 +29,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE && k !== IMG_CACHE).map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -39,6 +40,25 @@ self.addEventListener("activate", (event) => {
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
+
+  // 유튜브 썸네일: cache-first — 한 번 받으면 캐시에서 제공해 네트워크 트래픽 최소화.
+  if (url.hostname === "i.ytimg.com") {
+    event.respondWith(
+      caches.open(IMG_CACHE).then(async (cache) => {
+        const hit = await cache.match(req);
+        if (hit) return hit;
+        try {
+          const res = await fetch(req);
+          if (res && (res.ok || res.type === "opaque")) cache.put(req, res.clone());
+          return res;
+        } catch (e) {
+          return hit || Response.error();
+        }
+      })
+    );
+    return;
+  }
+
   // 동일 출처 GET만 처리 (Worker API 등 교차 출처 요청은 그대로 통과)
   if (req.method !== "GET" || url.origin !== self.location.origin) return;
 

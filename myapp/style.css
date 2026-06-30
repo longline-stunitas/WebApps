@@ -12,19 +12,20 @@
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 body {
-  min-height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden; /* 스크롤은 #app 안에서만 */
   background: var(--bg);
   color: var(--text);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  padding-bottom: env(safe-area-inset-bottom);
   touch-action: pan-x pan-y; /* 핀치/더블탭 줌 방지, 스크롤은 허용 */
   -webkit-text-size-adjust: 100%;
 }
 
-/* ── 상단바 ── */
+/* ── 상단바 (고정) ── */
 #topbar {
-  position: sticky;
-  top: 0;
+  flex-shrink: 0;
   z-index: 10;
   display: flex;
   align-items: center;
@@ -42,16 +43,24 @@ body {
   padding: 0.2rem 0.4rem;
 }
 
+/* 본문: 유일한 세로 스크롤 영역 */
 #app {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  width: 100%;
   max-width: 640px;
   margin: 0 auto;
   padding: 1rem;
 }
 
 .status {
+  flex-shrink: 0;
   max-width: 640px;
+  width: 100%;
   margin: 0 auto;
-  padding: 0 1rem 1.5rem;
+  padding: 0.4rem 1rem calc(0.4rem + env(safe-area-inset-bottom));
   min-height: 1.2em;
   font-size: 0.85rem;
   color: var(--muted);
@@ -290,6 +299,18 @@ button:active { transform: scale(0.97); }
 .modal-card .att-actions { margin-top: 0.3rem; }
 
 /* ── 유튜브 ── */
+/* 상단 고정 영역: #app 스크롤 시 제목~요약까지 붙박이, 그 아래 리스트만 스크롤 */
+#app.flush-top { padding-top: 0; }
+.yt-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--bg);
+  margin: 0 -1rem; /* #app 좌우 padding 상쇄해 가장자리까지 배경 */
+  padding: 0.8rem 1rem 0.4rem;
+  border-bottom: 1px solid var(--line);
+}
+.yt-sticky .sec { margin-top: 0; }
 .yt-top { display: flex; gap: 0.4rem; align-items: stretch; }
 .yt-tools { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.5rem; }
 .yt-sortbtn { margin-left: auto; } /* 정렬 버튼은 줄 오른쪽 끝에 */

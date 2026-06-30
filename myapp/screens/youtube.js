@@ -283,10 +283,11 @@ export function mount(root) {
   const summaryEl = el("div", { className: "yt-summary" });
   const listEl = el("div", { className: "yt-list" });
 
-  root.appendChild(el("h3", { className: "sec" }, "재생목록 / 영상"));
-  root.appendChild(topRow);
-  root.appendChild(toolRow);
-  root.appendChild(summaryEl);
+  // 상단(제목·재생목록·툴바·요약)은 고정, 그 아래 영상 리스트만 스크롤
+  root.appendChild(el("div", { className: "yt-sticky" }, [
+    el("h3", { className: "sec" }, "재생목록 / 영상"),
+    topRow, toolRow, summaryEl,
+  ]));
   root.appendChild(listEl);
   root.appendChild(modal);
 
@@ -372,12 +373,15 @@ export function mount(root) {
     const isFirst = prevItems.length === 0;
 
     const res = await fetchYoutubePlaylist(id);
-    const merged = (res.items || []).map((it) => {
+    const fresh = [], existing = [];
+    for (const it of res.items || []) {
       const old = stateMap.get(it.videoId);
-      // 기존 항목: 사용자 상태 보존 / 신규(최초 로드 아님): NEW 표시
-      return old ? normVideo(it, old) : normVideo(it, { createDate: isFirst ? null : nowISO() });
-    });
-    const newCount = merged.filter((v) => v.createDate).length;
+      if (old) existing.push(normVideo(it, old)); // 기존: 상태 보존
+      else fresh.push(normVideo(it, { createDate: isFirst ? null : nowISO() })); // 신규: NEW
+    }
+    // 새로 올라온 영상(신규)을 맨 위로. 최초 로드는 NEW 없이 그대로 저장.
+    const merged = isFirst ? fresh : [...fresh, ...existing];
+    const newCount = fresh.filter((v) => v.createDate).length;
     const d = { items: merged, hiddenCount: res.hiddenCount || 0, ts: Date.now(), lastShowVideoId: cached?.lastShowVideoId || null };
     set(vidKey(id), d);
     return { d, newCount };

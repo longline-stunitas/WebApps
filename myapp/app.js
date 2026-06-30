@@ -31,9 +31,10 @@ function render() {
 
   titleEl.textContent = screen.title || "myapp";
   backBtn.hidden = key === "menu";
+  appEl.classList.toggle("flush-top", key === "youtube"); // 유튜브는 상단 sticky를 위해 패딩 제거
 
   current = screen.mount(appEl) || {};
-  window.scrollTo(0, 0);
+  appEl.scrollTop = 0;
 }
 
 backBtn.addEventListener("click", () => { location.hash = "#/menu"; });
