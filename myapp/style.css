@@ -267,7 +267,8 @@ button:active { transform: scale(0.97); }
 }
 .yt-select.sort { flex: 0 0 auto; min-width: 6rem; }
 
-.yt-list { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.8rem; }
+.yt-summary { font-size: 0.78rem; color: var(--muted); margin-top: 0.6rem; }
+.yt-list { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.5rem; }
 .yt-card {
   background: var(--card);
   border: 1px solid var(--line);

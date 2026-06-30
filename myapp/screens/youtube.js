@@ -72,6 +72,13 @@ const SORTS = [
   { key: "memo", label: "메모 먼저" },
 ];
 
+// 정렬 드롭다운의 '이동' 동작(일회성). 값은 '__' 접두어로 정렬키와 구분.
+const SORT_MOVES = [
+  { key: "__top", label: "↑ 맨 위로" },
+  { key: "__bottom", label: "↓ 맨 아래로" },
+  { key: "__recent", label: "● 최근 본 곳" },
+];
+
 function loadPlaylists() {
   const p = get(PL_KEY, null);
   // 최초 실행(키 자체가 없음)일 때만 시드 적용.
@@ -161,9 +168,11 @@ export function mount(root) {
   const mHeading = el("h3", { className: "modal-title" }, "재생목록 추가");
   const mSave = el("button", { className: "btn-line", textContent: "저장", onclick: onSavePlaylist });
   const mCancel = el("button", { className: "btn-line", textContent: "취소", onclick: closeModal });
+  const mDelete = el("button", { className: "btn-line danger", textContent: "이 재생목록 삭제", onclick: onDeletePlaylist });
   const modalCard = el("div", { className: "modal-card" }, [
     mHeading, mTitle, mId,
     el("div", { className: "att-actions" }, [mCancel, mSave]),
+    mDelete,
   ]);
   const modal = el("div", {
     className: "modal", hidden: true,
@@ -186,6 +195,7 @@ export function mount(root) {
       mTitle.value = "";
       mId.value = "";
     }
+    mDelete.hidden = !editMode; // 삭제는 편집 모드에서만
     modal.hidden = false;
     mTitle.focus();
   }
@@ -193,26 +203,46 @@ export function mount(root) {
 
   // ── 상단 툴바 ──
   const select = el("select", { className: "yt-select", onchange: () => selectPlaylist(select.value) });
-  const sortSelect = el("select", { className: "yt-select sort",
-    onchange: () => { sortKind = sortSelect.value; set(SORT_KEY, sortKind); renderList(); } });
-  for (const s of SORTS) sortSelect.appendChild(el("option", { value: s.key, textContent: s.label }));
+
+  // 정렬 + 이동(스크롤)을 한 드롭다운에. 이동은 '__' 접두어로 구분, 선택 시 일회성 동작 후 정렬값 복원.
+  const sortSelect = el("select", { className: "yt-select sort", onchange: onSortChange });
+  const gSort = el("optgroup", { label: "정렬" });
+  for (const s of SORTS) gSort.appendChild(el("option", { value: s.key, textContent: s.label }));
+  const gMove = el("optgroup", { label: "이동" });
+  for (const m of SORT_MOVES) gMove.appendChild(el("option", { value: m.key, textContent: m.label }));
+  sortSelect.appendChild(gSort);
+  sortSelect.appendChild(gMove);
   sortSelect.value = sortKind;
+
+  function onSortChange() {
+    const v = sortSelect.value;
+    if (v.startsWith("__")) { doMove(v); sortSelect.value = sortKind; return; }
+    sortKind = v;
+    set(SORT_KEY, sortKind);
+    renderList();
+  }
+  function doMove(kind) {
+    if (kind === "__recent") return scrollToRecent();
+    if (kind === "__top") window.scrollTo({ top: 0, behavior: "smooth" });
+    if (kind === "__bottom") window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+  }
 
   const addBtn = el("button", { className: "mini", textContent: "＋ 추가", onclick: () => openModal(false) });
   const refreshBtn = el("button", { className: "mini", textContent: "↻ 갱신", onclick: () => loadVideos(currentId, true) });
+  const allBtn = el("button", { className: "mini", textContent: "⟳ 전체갱신", onclick: refreshAll });
   const thumbBtn = el("button", { className: "mini", onclick: toggleThumb });
-  const recentBtn = el("button", { className: "mini", textContent: "최근본곳", onclick: scrollToRecent });
   const editBtn = el("button", { className: "mini", textContent: "목록편집", onclick: () => openModal(true) });
-  const delBtn = el("button", { className: "mini danger", textContent: "목록삭제", onclick: deleteCurrent });
 
   const topRow = el("div", { className: "yt-top" }, [select, sortSelect]);
-  const toolRow = el("div", { className: "yt-tools" }, [addBtn, refreshBtn, thumbBtn, recentBtn, editBtn, delBtn]);
+  const toolRow = el("div", { className: "yt-tools" }, [addBtn, refreshBtn, allBtn, thumbBtn, editBtn]);
 
+  const summaryEl = el("div", { className: "yt-summary" });
   const listEl = el("div", { className: "yt-list" });
 
   root.appendChild(el("h3", { className: "sec" }, "재생목록 / 영상"));
   root.appendChild(topRow);
   root.appendChild(toolRow);
+  root.appendChild(summaryEl);
   root.appendChild(listEl);
   root.appendChild(modal);
 
@@ -240,17 +270,17 @@ export function mount(root) {
     loadVideos(currentId, false);
     setStatus("저장되었습니다.");
   }
-  function deleteCurrent() {
-    const p = playlists.find((x) => x.id === currentId);
-    if (!p) return setStatus("선택된 재생목록이 없습니다.");
-    playlists = playlists.filter((x) => x.id !== p.id);
-    remove(vidKey(p.id));
+  function onDeletePlaylist() {
+    if (!editingId) return;
+    playlists = playlists.filter((x) => x.id !== editingId);
+    remove(vidKey(editingId));
     savePlaylists(playlists);
     currentId = playlists[0]?.id || null;
     set(LAST_KEY, currentId);
+    closeModal();
     renderSelect();
     loadVideos(currentId, false);
-    setStatus("삭제되었습니다.");
+    setStatus("재생목록을 삭제했습니다.");
   }
 
   function toggleThumb() {
@@ -260,6 +290,16 @@ export function mount(root) {
     renderList();
   }
 
+  // 재생목록 옵션 뒤 부가표시: [영상수] 감춤n NEWn
+  function playlistMetaText(id) {
+    const d = get(vidKey(id), null);
+    if (!d || !d.items) return "";
+    let s = ` [${d.items.length}]`;
+    if (d.hiddenCount) s += ` 감춤${d.hiddenCount}`;
+    const n = d.items.filter((v) => v.createDate).length;
+    if (n) s += ` NEW${n}`;
+    return s;
+  }
   function renderSelect() {
     select.innerHTML = "";
     if (!playlists.length) {
@@ -267,7 +307,9 @@ export function mount(root) {
       currentId = null;
       return;
     }
-    for (const p of playlists) select.appendChild(el("option", { value: p.id, textContent: p.title }));
+    for (const p of playlists) {
+      select.appendChild(el("option", { value: p.id, textContent: p.title + playlistMetaText(p.id) }));
+    }
     if (!currentId || !playlists.some((x) => x.id === currentId)) currentId = playlists[0].id;
     select.value = currentId;
   }
@@ -281,36 +323,60 @@ export function mount(root) {
   }
 
   // ── 영상 로드 (증분 갱신) ──
+  // API 조회 + 기존 상태 보존 병합 + 저장. { d, newCount } 반환. (렌더는 호출측에서)
+  async function fetchAndStore(id) {
+    const cached = get(vidKey(id), null);
+    const prevItems = (cached && cached.items) || [];
+    const stateMap = new Map(prevItems.map((v) => [v.videoId, v]));
+    const isFirst = prevItems.length === 0;
+
+    const res = await fetchYoutubePlaylist(id);
+    const merged = (res.items || []).map((it) => {
+      const old = stateMap.get(it.videoId);
+      // 기존 항목: 사용자 상태 보존 / 신규(최초 로드 아님): NEW 표시
+      return old ? normVideo(it, old) : normVideo(it, { createDate: isFirst ? null : nowISO() });
+    });
+    const newCount = merged.filter((v) => v.createDate).length;
+    const d = { items: merged, hiddenCount: res.hiddenCount || 0, ts: Date.now(), lastShowVideoId: cached?.lastShowVideoId || null };
+    set(vidKey(id), d);
+    return { d, newCount };
+  }
+
   async function loadVideos(id, force) {
     if (!id) { data = null; renderList(); return; }
     const cached = get(vidKey(id), null);
     // 원본과 동일: 재생목록 선택 시엔 로컬 저장본만 표시하고 API는 호출하지 않는다.
-    // API 조회·저장은 상단 '↻ 갱신' 버튼(force=true)으로만 수행.
-    if (!force) { data = cached; renderList(); return; }
+    // API 조회·저장은 '↻ 갱신'(현재 목록) / '⟳ 전체갱신'으로만 수행.
+    // 진입·선택 시 마지막 본 영상으로 자동 스크롤(중앙).
+    if (!force) { data = cached; renderList(); scrollToRecent(true); return; }
 
     listEl.innerHTML = "";
     listEl.appendChild(el("div", { className: "empty" }, "불러오는 중…"));
     try {
-      const prevItems = (cached && cached.items) || [];
-      const stateMap = new Map(prevItems.map((v) => [v.videoId, v]));
-      const isFirst = prevItems.length === 0;
-
-      const res = await fetchYoutubePlaylist(id);
-      const merged = (res.items || []).map((it) => {
-        const old = stateMap.get(it.videoId);
-        // 기존 항목: 사용자 상태 보존 / 신규(최초 로드 아님): NEW 표시
-        return old ? normVideo(it, old) : normVideo(it, { createDate: isFirst ? null : nowISO() });
-      });
-      const newCount = merged.filter((v) => v.createDate).length;
-      data = { items: merged, hiddenCount: res.hiddenCount || 0, ts: Date.now(), lastShowVideoId: cached?.lastShowVideoId || null };
-      set(vidKey(id), data);
+      const { d, newCount } = await fetchAndStore(id);
+      data = d;
+      renderSelect(); // 재생목록 NEW/개수 표시 갱신
       renderList();
-      setStatus(`${merged.length}개 영상${res.hiddenCount ? ` (숨김 ${res.hiddenCount})` : ""}${force && newCount ? ` · 신규 ${newCount}` : ""}`);
+      setStatus(`${d.items.length}개 영상${d.hiddenCount ? ` (숨김 ${d.hiddenCount})` : ""}${newCount ? ` · 신규 ${newCount}` : ""}`);
     } catch (e) {
       data = cached || null;
       renderList(e.message);
       setStatus("로드 실패: " + e.message);
     }
+  }
+
+  // 전체 갱신: 모든 재생목록을 순회 조회. 각 목록의 신규 영상이 NEWn으로 표시된다.
+  async function refreshAll() {
+    if (!playlists.length) return setStatus("재생목록이 없습니다.");
+    let done = 0, totalNew = 0;
+    for (const p of playlists) {
+      setStatus(`전체 갱신 중… (${++done}/${playlists.length})`);
+      try { const { newCount } = await fetchAndStore(p.id); totalNew += newCount; } catch {}
+    }
+    data = currentId ? get(vidKey(currentId), null) : null;
+    renderSelect();
+    renderList();
+    setStatus(`전체 갱신 완료 · 신규 ${totalNew}개`);
   }
 
   // ── 영상별 동작 ──
@@ -342,14 +408,26 @@ export function mount(root) {
     renderList(); // 메모 표시 갱신(펼침 유지)
   }
 
-  function scrollToRecent() {
+  // 마지막 본 영상을 화면 중앙으로. silent=true면 안내 메시지 없음(자동 스크롤용).
+  function scrollToRecent(silent) {
     const node = listEl.querySelector(".yt-card.recent");
-    if (node) node.scrollIntoView({ block: "center", behavior: "smooth" });
-    else setStatus("최근 본 영상이 없습니다.");
+    if (node) requestAnimationFrame(() => node.scrollIntoView({ block: "center", behavior: "smooth" }));
+    else if (!silent) setStatus("최근 본 영상이 없습니다.");
   }
 
   // ── 렌더 ──
+  // 영상 총 개수 / 신규 / 숨김 요약
+  function renderSummary() {
+    const items = (data && data.items) || [];
+    if (!currentId || !items.length) { summaryEl.textContent = ""; return; }
+    const n = items.filter((v) => v.createDate).length;
+    summaryEl.textContent = `총 ${items.length}개`
+      + (n ? ` · 신규 ${n}` : "")
+      + (data.hiddenCount ? ` · 숨김 ${data.hiddenCount}` : "");
+  }
+
   function renderList(errMsg) {
+    renderSummary();
     listEl.innerHTML = "";
     if (errMsg) {
       listEl.appendChild(el("div", { className: "empty" }, "로드 실패: " + errMsg));
@@ -369,7 +447,15 @@ export function mount(root) {
 
     ordered.forEach((v) => {
       const isRecent = v.videoId === lastId;
-      const head = el("button", { className: "yt-head", onclick: () => { expandedId = expandedId === v.videoId ? null : v.videoId; renderList(); } });
+      const head = el("button", {
+        className: "yt-head",
+        onclick: () => {
+          if (v.createDate) { v.createDate = null; persist(); } // 누르면 NEW 해제 + 재생목록 NEW수 반영
+          expandedId = expandedId === v.videoId ? null : v.videoId;
+          renderSelect();
+          renderList();
+        },
+      });
 
       if (showThumb && v.thumbnail) head.appendChild(el("img", { className: "yt-thumb", src: v.thumbnail, loading: "lazy", alt: "" }));
 
