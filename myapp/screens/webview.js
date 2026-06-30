@@ -1,7 +1,7 @@
 // Webview Test — URL 북마크 매니저(추가/편집/삭제/순서변경).
-// 항목 선택 시 새 탭으로 열기. (iframe 임베드는 대부분 사이트가 차단하므로 새 탭이 안전)
+// 추가·편집은 팝업(모달). 항목 선택 시 새 탭(폰은 인앱 사파리)으로 열기.
 import { get, set, uid } from "../lib/store.js";
-import { el, setStatus } from "../lib/ui.js";
+import { el, setStatus, confirmDialog } from "../lib/ui.js";
 
 export const title = "Webview Test";
 
@@ -18,34 +18,51 @@ function normalizeUrl(u) {
 
 export function mount(root) {
   let items = load();
-  let editingId = null; // 폼이 편집 중인 항목 id (null = 신규)
+  let editingId = null; // 모달이 편집 중인 항목 id (null = 신규)
+
+  // ── 추가/편집 모달(팝업) ──
+  const titleInput = el("input", { type: "text", placeholder: "타이틀" });
+  const urlInput = el("input", { type: "url", placeholder: "https://example.com", inputMode: "url" });
+  const mHeading = el("h3", { className: "modal-title" }, "북마크 추가");
+  const mSave = el("button", { className: "btn-line", textContent: "저장", onclick: onSave });
+  const mCancel = el("button", { className: "btn-line", textContent: "취소", onclick: closeModal });
+  const modalCard = el("div", { className: "modal-card" }, [
+    mHeading, titleInput, urlInput,
+    el("div", { className: "att-actions" }, [mCancel, mSave]),
+  ]);
+  const modal = el("div", {
+    className: "modal", hidden: true,
+    onclick: (e) => { if (e.target === modal) closeModal(); },
+  }, [modalCard]);
+
+  function openModal(it) {
+    if (it) {
+      editingId = it.identifier;
+      mHeading.textContent = "북마크 편집";
+      mSave.textContent = "수정 적용";
+      titleInput.value = it.title || "";
+      urlInput.value = it.urlString || "";
+    } else {
+      editingId = null;
+      mHeading.textContent = "북마크 추가";
+      mSave.textContent = "저장";
+      titleInput.value = "";
+      urlInput.value = "";
+    }
+    modal.hidden = false;
+    titleInput.focus();
+  }
+  function closeModal() { modal.hidden = true; }
+
+  // ── 헤더: "북마크" + ＋추가 버튼 ──
+  const addBtn = el("button", { className: "mini", textContent: "＋ 추가", onclick: () => openModal(null) });
+  const header = el("div", { className: "wv-header" }, [el("h3", { className: "sec" }, "북마크"), addBtn]);
 
   const listEl = el("div", { className: "wv-list" });
 
-  // 추가/편집 폼
-  const titleInput = el("input", { type: "text", placeholder: "타이틀" });
-  const urlInput = el("input", { type: "url", placeholder: "https://example.com", inputMode: "url" });
-  const formTitle = el("h3", { className: "sec" }, "북마크 추가");
-  const saveBtn = el("button", { className: "btn-line", textContent: "저장", onclick: onSave });
-  const resetBtn = el("button", { className: "btn-line", textContent: "비우기", onclick: resetForm });
-  const form = el("div", { className: "wv-form" }, [
-    titleInput,
-    urlInput,
-    el("div", { className: "att-actions" }, [saveBtn, resetBtn]),
-  ]);
-
-  root.appendChild(formTitle);
-  root.appendChild(form);
-  root.appendChild(el("h3", { className: "sec" }, "북마크"));
+  root.appendChild(header);
   root.appendChild(listEl);
-
-  function resetForm() {
-    editingId = null;
-    titleInput.value = "";
-    urlInput.value = "";
-    formTitle.textContent = "북마크 추가";
-    saveBtn.textContent = "저장";
-  }
+  root.appendChild(modal);
 
   function onSave() {
     const t = titleInput.value.trim();
@@ -59,24 +76,16 @@ export function mount(root) {
       items.push({ identifier: uid(), title: t, urlString: u });
     }
     save(items);
-    resetForm();
+    closeModal();
     render();
     setStatus("저장되었습니다.");
   }
 
-  function edit(it) {
-    editingId = it.identifier;
-    titleInput.value = it.title || "";
-    urlInput.value = it.urlString || "";
-    formTitle.textContent = "북마크 편집";
-    saveBtn.textContent = "수정 적용";
-    titleInput.focus();
-  }
-
-  function remove(id) {
+  async function remove(id) {
+    const it = items.find((x) => x.identifier === id);
+    if (!(await confirmDialog(`'${it?.title || "이 북마크"}'를 삭제할까요?`, { okText: "삭제", danger: true }))) return;
     items = items.filter((x) => x.identifier !== id);
     save(items);
-    if (editingId === id) resetForm();
     render();
   }
 
@@ -93,10 +102,42 @@ export function mount(root) {
     window.open(it.urlString, "_blank", "noopener");
   }
 
+  // ── 앱 안에서 iframe으로 열기 (전체화면 오버레이 + 하단 바) ──
+  // 외부 사이트는 cross-origin이라 현재 URL/제목/이전이동이 제한됨(가능하면 읽고, 안 되면 폴백).
+  function frameCurrentUrl(iframe, fallback) {
+    try { return iframe.contentWindow.location.href; } catch { return fallback; }
+  }
+  function frameAutoTitle(iframe, url) {
+    try { const t = iframe.contentDocument && iframe.contentDocument.title; if (t) return t; } catch {}
+    try { return new URL(url).hostname.replace(/^www\./, ""); } catch { return "북마크"; }
+  }
+  function openFrame(it) {
+    if (!it.urlString) return;
+    const startUrl = it.urlString;
+    const iframe = el("iframe", { className: "wv-frame", src: startUrl });
+    const addBtn = el("button", { className: "btn-line", textContent: "＋ 즐겨찾기", onclick: () => {
+      const url = frameCurrentUrl(iframe, startUrl);
+      const title = frameAutoTitle(iframe, url);
+      items.push({ identifier: uid(), title, urlString: url }); // 제목은 자동
+      save(items);
+      render();
+      setStatus(`'${title}' 추가됨`);
+    } });
+    const backBtn = el("button", { className: "btn-line", textContent: "‹ 이전", onclick: () => {
+      try { iframe.contentWindow.history.back(); } catch { setStatus("외부 사이트는 이전 이동이 제한됩니다."); }
+    } });
+    const closeBtn = el("button", { className: "btn-line", textContent: "닫기", onclick: () => overlay.remove() });
+    const overlay = el("div", { className: "wv-frame-overlay" }, [
+      iframe,
+      el("div", { className: "wv-frame-bar" }, [addBtn, backBtn, closeBtn]),
+    ]);
+    document.body.appendChild(overlay);
+  }
+
   function render() {
     listEl.innerHTML = "";
     if (!items.length) {
-      listEl.appendChild(el("div", { className: "empty" }, "북마크가 없습니다. 위에서 추가하세요."));
+      listEl.appendChild(el("div", { className: "empty" }, "북마크가 없습니다. 위 ‘＋ 추가’로 등록하세요."));
       return;
     }
     items.forEach((it, idx) => {
@@ -107,11 +148,13 @@ export function mount(root) {
         el("span", { className: "menu-label" }, it.title || "(제목 없음)"),
         el("span", { className: "menu-desc" }, it.urlString || ""),
       ]);
+      // 위치변경·편집·삭제: 타이틀 라인 오른쪽 끝
       const ctrls = el("div", { className: "wv-ctrls" }, [
         el("button", { className: "mini", textContent: "↑", title: "위로", onclick: () => move(idx, -1) }),
         el("button", { className: "mini", textContent: "↓", title: "아래로", onclick: () => move(idx, 1) }),
-        el("button", { className: "mini", textContent: "편집", onclick: () => edit(it) }),
+        el("button", { className: "mini", textContent: "편집", onclick: () => openModal(it) }),
         el("button", { className: "mini danger", textContent: "삭제", onclick: () => remove(it.identifier) }),
+        el("button", { className: "mini", textContent: "iframe", title: "앱 안에서 열기", onclick: () => openFrame(it) }),
       ]);
       listEl.appendChild(el("div", { className: "wv-item" }, [open_, ctrls]));
     });

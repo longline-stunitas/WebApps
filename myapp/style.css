@@ -197,10 +197,13 @@ button:active { transform: scale(0.97); }
 .wv-form .att-actions { margin-top: 0.2rem; }
 
 /* ── 웹뷰 리스트 ── */
+.wv-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.wv-header .sec { margin-bottom: 0; }
 .wv-list { display: flex; flex-direction: column; gap: 0.6rem; }
 .wv-item {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: flex-start;
   gap: 0.5rem;
   background: var(--card);
   border: 1px solid var(--line);
@@ -208,6 +211,8 @@ button:active { transform: scale(0.97); }
   padding: 0.7rem;
 }
 .wv-open {
+  flex: 1;
+  min-width: 0;
   text-align: left;
   display: flex;
   flex-direction: column;
@@ -217,7 +222,20 @@ button:active { transform: scale(0.97); }
   color: var(--text);
 }
 .wv-open .menu-desc { word-break: break-all; }
-.wv-ctrls { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+.wv-ctrls { display: flex; gap: 0.3rem; flex-wrap: wrap; justify-content: flex-end; flex-shrink: 0; max-width: 60%; }
+
+/* iframe 전체화면 뷰어 */
+.wv-frame-overlay { position: fixed; inset: 0; z-index: 70; display: flex; flex-direction: column; background: var(--bg); }
+.wv-frame { flex: 1; width: 100%; border: none; background: #fff; }
+.wv-frame-bar {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.6rem;
+  padding-bottom: calc(0.6rem + env(safe-area-inset-bottom));
+  background: var(--card);
+  border-top: 1px solid var(--line);
+}
+.wv-frame-bar .btn-line { margin-top: 0; flex: 1; }
 
 /* ── 모달(팝업) ── */
 .modal {
