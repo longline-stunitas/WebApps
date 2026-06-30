@@ -106,6 +106,19 @@ button:active { transform: scale(0.97); }
 
 /* ── 메뉴 ── */
 .menu-list { display: flex; flex-direction: column; gap: 0.6rem; }
+.menu-backup {
+  display: block; width: 100%; margin-top: 1.2rem;
+  padding: 0.7rem; background: transparent; color: var(--muted);
+  border: 1px dashed var(--line); border-radius: 10px; font-size: 0.9rem;
+}
+.backup-sec { margin-top: 1rem; }
+.backup-h { font-size: 0.9rem; font-weight: 600; margin-bottom: 0.4rem; }
+.backup-text {
+  width: 100%; box-sizing: border-box; font-family: ui-monospace, monospace;
+  font-size: 0.75rem; padding: 0.5rem; border: 1px solid var(--line);
+  border-radius: 8px; background: var(--bg); color: var(--fg); resize: vertical;
+}
+.backup-file { display: block; width: 100%; margin-bottom: 0.5rem; font-size: 0.85rem; }
 .menu-item { display: flex; gap: 0.5rem; align-items: stretch; }
 .menu-go {
   flex: 1;
