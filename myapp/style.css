@@ -35,7 +35,7 @@ body {
   border-bottom: 1px solid var(--line);
 }
 #screen-title { font-size: 1.15rem; }
-.app-ver { margin-left: auto; color: var(--muted); font-size: 0.7rem; opacity: 0.55; }
+.app-ver { margin-left: auto; color: #fff; font-size: 0.8rem; font-weight: 600; }
 #back-btn {
   background: transparent;
   color: var(--accent);
