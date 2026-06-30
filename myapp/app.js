@@ -37,6 +37,10 @@ function render() {
   appEl.scrollTop = 0;
 }
 
+// 배포 버전을 topbar에 항상 표시 — 폰에서 반영 여부 확인용.
+const verEl = document.getElementById("app-ver");
+if (verEl) verEl.textContent = (window.PUSH_CONFIG && window.PUSH_CONFIG.APP_VERSION) || "";
+
 backBtn.addEventListener("click", () => { location.hash = "#/menu"; });
 window.addEventListener("hashchange", render);
 
