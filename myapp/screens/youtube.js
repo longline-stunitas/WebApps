@@ -102,13 +102,28 @@ function normVideo(it, base = {}) {
     title: it.title,
     thumbnail: it.thumbnail ?? null,
     position: it.position ?? null,
-    duration: it.duration ?? base.duration ?? null, // ISO8601 (예: PT5M30S)
+    duration: it.duration ?? base.duration ?? null,   // ISO8601 (예: PT5M30S)
+    published: it.published ?? base.published ?? null, // 영상 게시일 ISO8601
     important: base.important ?? false,
     showCount: base.showCount ?? 0,
     memo: base.memo ?? "",
     createDate: base.createDate ?? null, // 값 있으면 NEW
     lastShowTime: base.lastShowTime ?? null,
   };
+}
+
+// 재생 불가(private/deleted) 영상 방어 필터 — 썸네일 없음/제목이 Private·Deleted면 숨김
+function isPlayable(v) {
+  return !!v.thumbnail && v.title !== "Private video" && v.title !== "Deleted video";
+}
+
+// ISO8601 날짜 → "YYYY.MM.DD"
+function fmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const p = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}.${p(d.getMonth() + 1)}.${p(d.getDate())}`;
 }
 
 // ISO8601 duration → "H:MM:SS" / "M:SS"
@@ -266,11 +281,9 @@ export function mount(root) {
   }
   function doMove(kind) {
     if (kind === "__recent") return scrollToRecent();
-    // 최근본곳과 동일하게 scrollIntoView 사용(iOS에서 scrollTo가 안 먹는 문제 회피)
-    const cards = listEl.querySelectorAll(".yt-card");
-    if (!cards.length) return;
-    if (kind === "__top") cards[0].scrollIntoView({ block: "start", behavior: "smooth" });
-    if (kind === "__bottom") cards[cards.length - 1].scrollIntoView({ block: "end", behavior: "smooth" });
+    // scrollTop 직접 설정(iOS 호환, 부드러움은 CSS scroll-behavior). 맨 위는 정확히 최상단.
+    if (kind === "__top") root.scrollTop = 0;
+    if (kind === "__bottom") root.scrollTop = root.scrollHeight;
   }
 
   const editBtn = el("button", { className: "mini", textContent: "목록편집", onclick: openModal });
@@ -383,8 +396,9 @@ export function mount(root) {
       else fresh.push(normVideo(it, { createDate: isFirst ? null : nowISO() })); // 신규: NEW
     }
     // 새로 올라온 영상(신규)을 맨 위로. 최초 로드는 NEW 없이 그대로 저장.
-    const merged = isFirst ? fresh : [...fresh, ...existing];
-    const newCount = fresh.filter((v) => v.createDate).length;
+    // private/deleted는 방어적으로 한 번 더 거른다(worker가 이미 제외하지만 안전).
+    const merged = (isFirst ? fresh : [...fresh, ...existing]).filter(isPlayable);
+    const newCount = merged.filter((v) => v.createDate).length;
     const d = { items: merged, hiddenCount: res.hiddenCount || 0, ts: Date.now(), lastShowVideoId: cached?.lastShowVideoId || null };
     set(vidKey(id), d);
     return { d, newCount };
@@ -396,7 +410,17 @@ export function mount(root) {
     // 원본과 동일: 재생목록 선택 시엔 로컬 저장본만 표시하고 API는 호출하지 않는다.
     // API 조회·저장은 '↻ 갱신'(현재 목록) / '⟳ 전체갱신'으로만 수행.
     // 진입·선택 시 마지막 본 영상으로 자동 스크롤(중앙).
-    if (!force) { data = cached; renderList(); scrollToRecent(true); return; }
+    if (!force) {
+      data = cached;
+      // 기존 캐시에 남아있는 private/deleted를 즉시 정리(이전 버전에서 저장된 것)
+      if (data && data.items) {
+        const filtered = data.items.filter(isPlayable);
+        if (filtered.length !== data.items.length) { data.items = filtered; set(vidKey(id), data); }
+      }
+      renderList();
+      scrollToRecent(true);
+      return;
+    }
 
     listEl.innerHTML = "";
     listEl.appendChild(el("div", { className: "empty" }, "불러오는 중…"));
@@ -543,10 +567,12 @@ export function mount(root) {
 
       if (showThumb && v.thumbnail) head.appendChild(el("img", { className: "yt-thumb", src: v.thumbnail, loading: "lazy", alt: "" }));
 
-      // 썸네일 오른쪽(상단): 제목 + 영상시간. 시간은 다른 메타가 없어도 항상 표시.
+      // 썸네일 오른쪽(상단): 제목 + 영상시간 · 등록일.
       const body = el("div", { className: "yt-body" }, [el("span", { className: "yt-vtitle" }, v.title)]);
       const dur = fmtDuration(v.duration);
-      if (dur) body.appendChild(el("span", { className: "yt-time" }, dur));
+      const date = fmtDate(v.published);
+      const meta1 = [dur, date].filter(Boolean).join("  ·  ");
+      if (meta1) body.appendChild(el("span", { className: "yt-time" }, meta1));
       head.appendChild(body);
 
       const card = el("div", { className: "yt-card" + (isRecent ? " recent" : "") }, [head]);

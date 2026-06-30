@@ -143,20 +143,26 @@ export default {
           pageToken = data.nextPageToken ?? "";
         } while (pageToken);
 
-        // 각 영상 길이(duration) 조회: videos.list contentDetails (id 50개씩)
+        // 각 영상 길이(duration) + 게시일(publishedAt) 조회: videos.list (id 50개씩)
         const ids = items.map((it) => it.videoId);
         for (let i = 0; i < ids.length; i += 50) {
           const chunk = ids.slice(i, i + 50);
           const vurl = new URL("https://www.googleapis.com/youtube/v3/videos");
-          vurl.searchParams.set("part", "contentDetails");
+          vurl.searchParams.set("part", "contentDetails,snippet");
           vurl.searchParams.set("id", chunk.join(","));
           vurl.searchParams.set("key", env.YOUTUBE_API_KEY);
           const vr = await fetch(vurl.toString());
-          if (!vr.ok) continue; // 길이는 부가정보 — 실패해도 목록은 그대로 반환
+          if (!vr.ok) continue; // 부가정보 — 실패해도 목록은 그대로 반환
           const vd = await vr.json();
-          const durMap = {};
-          for (const v of vd.items ?? []) durMap[v.id] = v.contentDetails?.duration ?? null;
-          for (const it of items) if (it.videoId in durMap) it.duration = durMap[it.videoId];
+          const durMap = {}, pubMap = {};
+          for (const v of vd.items ?? []) {
+            durMap[v.id] = v.contentDetails?.duration ?? null;
+            pubMap[v.id] = v.snippet?.publishedAt ?? null; // 영상 게시일
+          }
+          for (const it of items) {
+            if (it.videoId in durMap) it.duration = durMap[it.videoId];
+            if (it.videoId in pubMap) it.published = pubMap[it.videoId];
+          }
         }
 
         return json({ items, hiddenCount });
