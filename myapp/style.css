@@ -179,8 +179,17 @@ button:active { transform: scale(0.97); }
   color: var(--text);
 }
 .row span { color: var(--muted); font-size: 0.9rem; }
-.row-btns { display: flex; gap: 0.4rem; margin-left: auto; }
-.row-btns .btn-line { width: auto; margin: 0; padding: 0.5rem 1rem; }
+/* "가변 시간" 버튼(동적으로 길어지는 카운트다운 텍스트)만 줄여서, 오른쪽 버튼들은 항상 원래 크기를 유지 */
+.row > .btn-line {
+  width: auto;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.row-btns { display: flex; gap: 0.4rem; margin-left: auto; flex-shrink: 0; }
+.row-btns .btn-line { width: auto; margin: 0; white-space: nowrap; flex-shrink: 0; }
 
 .preset-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
 .preset {
@@ -211,6 +220,7 @@ button:active { transform: scale(0.97); }
 .rmd-when { color: var(--muted); font-size: 0.8rem; }
 .remain { color: var(--accent); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
 .remain.done { color: var(--muted); }
+.rmd-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
 .cancel {
   padding: 0.3rem 0.7rem;
   font-size: 0.8rem;
@@ -219,6 +229,15 @@ button:active { transform: scale(0.97); }
   background: #475569;
   color: var(--text);
 }
+.reset {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.8rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+}
+.reset:disabled { background: #475569; color: var(--muted); opacity: 0.6; }
 
 /* ── 입력 폼(웹뷰/유튜브 공용) ── */
 .wv-form { display: flex; flex-direction: column; gap: 0.5rem; }

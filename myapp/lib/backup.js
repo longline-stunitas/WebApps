@@ -17,10 +17,8 @@ export function exportJSON() {
   );
 }
 
-// 파일명용 타임스탬프(YYYY-MM-DD-HHMMSS).
 export function backupFilename() {
-  const t = new Date().toISOString().slice(0, 19).replace("T", "-").replace(/:/g, "");
-  return `myapp-backup-${t}.json`;
+  return "myapp.json";
 }
 
 // JSON 문자열 → localStorage 복원. mode: "replace"(기존 전부 교체) | "merge"(겹치면 덮고 나머지 보존).

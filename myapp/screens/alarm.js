@@ -8,6 +8,26 @@ export const title = "알림";
 
 const PRESETS = [5, 10, 15, 30, 60];
 const PICKER_KEY = "alarmPickerTime"; // 마지막 선택 시:분:초 기억 (STBlankProject 가변알림과 동일한 방식)
+const DURATIONS_KEY = "alarmDurations"; // { reminderId: minutes } — 서버는 fire_at만 갖고 있어 "재설정"용 원래 분값을 기기에 따로 기억해둔다.
+
+function saveDuration(id, minutes) {
+  const map = get(DURATIONS_KEY, {});
+  map[id] = minutes;
+  set(DURATIONS_KEY, map);
+}
+function getDuration(id) {
+  return get(DURATIONS_KEY, {})[id];
+}
+// 서버 목록에 더 이상 없는 id는 기억해둘 필요 없음 — reload마다 정리.
+function pruneDurations(ids) {
+  const map = get(DURATIONS_KEY, {});
+  const keep = new Set(ids);
+  let changed = false;
+  for (const k of Object.keys(map)) {
+    if (!keep.has(k)) { delete map[k]; changed = true; }
+  }
+  if (changed) set(DURATIONS_KEY, map);
+}
 
 export function mount(root) {
   let reminders = [];
@@ -30,12 +50,11 @@ export function mount(root) {
     },
   });
 
-  // 정시 알림 토글
-  const hourlyBtn = el("button", { className: "btn-line", textContent: "정시 알림", onclick: toggleHourly });
+  // 정시 알림 토글 — 별도 줄 없이 "추가" 옆에 배치(리스트 영역을 넓게 확보).
+  const hourlyBtn = el("button", { className: "btn-line", textContent: "정시", onclick: toggleHourly });
 
-  // 가변 알림 추가
-  const minutesInput = el("input", { type: "number", min: "1", value: "5", inputMode: "numeric" });
-  const addBtn = el("button", { className: "btn-line", textContent: "예약", onclick: () => addOnce(parseInt(minutesInput.value, 10), "가변 알림") });
+  // 가변 알림 추가 — 앱(STBlankProject)의 "가변 시간" 버튼처럼 가까운 예약의 남은시간을 표시.
+  const variableBtn = el("button", { className: "btn-line", textContent: "가변 시간", onclick: openPicker });
   const pickerBtn = el("button", { className: "btn-line", textContent: "추가", onclick: openPicker });
   const presetRow = el("div", { className: "preset-row" },
     PRESETS.map((m) => el("button", { className: "preset", textContent: `${m}분`, onclick: () => addOnce(m, "타임 알람") }))
@@ -44,11 +63,9 @@ export function mount(root) {
   const listEl = el("ul", { className: "reminders" });
 
   const controls = el("div", { hidden: true }, [
-    hourlyBtn,
     el("div", { className: "row" }, [
-      minutesInput,
-      el("span", {}, "분 뒤"),
-      el("div", { className: "row-btns" }, [addBtn, pickerBtn]),
+      variableBtn,
+      el("div", { className: "row-btns" }, [pickerBtn, hourlyBtn]),
     ]),
     presetRow,
     listEl,
@@ -62,12 +79,22 @@ export function mount(root) {
   async function addOnce(minutes, label) {
     if (!minutes || minutes <= 0) return setStatus("분을 올바르게 입력하세요.");
     try {
-      await addReminder({ type: "once", minutes, title: label, body: `${minutes}분 뒤 알림입니다.` });
+      const res = await addReminder({ type: "once", minutes, title: label, body: `${minutes}분 뒤 알림입니다.` });
+      if (res && res.id) saveDuration(res.id, minutes);
       setStatus(`${minutes}분 뒤로 예약되었습니다.`);
       await reload();
     } catch (e) {
       setStatus("예약 실패: " + e.message);
     }
+  }
+
+  // 앱의 "재설정"과 동일: 원래 예약했던 분(duration)을 그대로 재사용해 지금부터 다시 예약.
+  // 서버는 항목을 수정하는 API가 없어(추가/삭제만) 기존 항목은 정리하고 새로 추가한다.
+  async function resetAlarm(r) {
+    const minutes = getDuration(r.id);
+    if (!minutes) return setStatus("이 알림은 다시 설정할 수 없습니다.");
+    try { await cancelReminder(r.id); } catch {}
+    await addOnce(minutes, r.title);
   }
 
   // STBlankProject 가변알림의 "추가" 버튼과 동일한 흐름: 시:분:초 피커로 값을 고르면
@@ -120,13 +147,13 @@ export function mount(root) {
 
   async function reload() {
     reminders = await listReminders();
+    pruneDurations(reminders.map((r) => r.id));
     renderHourly();
     renderList();
   }
 
   function renderHourly() {
     const on = reminders.some((r) => r.recurrence === "hourly");
-    hourlyBtn.textContent = on ? "정시 알림 수신중 (끄기)" : "매 정시 알림 켜기";
     hourlyBtn.classList.toggle("on", on);
   }
 
@@ -138,14 +165,20 @@ export function mount(root) {
       return;
     }
     for (const r of once) {
-      const remainSpan = el("span", { className: "remain", "data-fire": String(r.fire_at) });
+      const expired = r.fire_at <= Date.now();
+      // el()은 Object.assign으로 props를 적용하므로 "data-*"는 실제 속성으로 반영되지 않음(getAttribute로 못 읽힘) — setAttribute로 직접 설정.
+      const remainSpan = el("span", { className: "remain" });
+      remainSpan.setAttribute("data-fire", String(r.fire_at));
+      // 앱의 셀과 동일한 상태 규칙: 대기중엔 "취소"만 동작(재설정 비활성), 완료되면 "재설정"이 켜지고 "삭제"로 바뀜.
+      const resetBtn = el("button", { className: "reset", textContent: "재설정", disabled: !expired, onclick: () => resetAlarm(r) });
+      const actionBtn = el("button", { className: "cancel", textContent: expired ? "삭제" : "취소", onclick: () => cancel(r.id) });
       const li = el("li", {}, [
         el("span", { className: "rmd-text" }, [
           el("b", {}, r.title || "알림"),
           el("span", { className: "rmd-when" }, ` ${fmtTime(r.fire_at)}`),
           remainSpan,
         ]),
-        el("button", { className: "cancel", textContent: "취소", onclick: () => cancel(r.id) }),
+        el("div", { className: "rmd-actions" }, [resetBtn, actionBtn]),
       ]);
       listEl.appendChild(li);
     }
@@ -158,17 +191,34 @@ export function mount(root) {
   }
   function updateRemains() {
     const now = Date.now();
-    listEl.querySelectorAll(".remain").forEach((span) => {
+    listEl.querySelectorAll("li").forEach((li) => {
+      const span = li.querySelector(".remain");
+      if (!span) return;
       const fire = Number(span.getAttribute("data-fire"));
       const left = fire - now;
-      if (left <= 0) {
+      const expired = left <= 0;
+      if (expired) {
         span.textContent = " · 완료됨";
         span.classList.add("done");
       } else {
         span.textContent = ` · 남은 ${fmtRemain(left)}`;
         span.classList.remove("done");
       }
+      const resetBtn = li.querySelector(".reset");
+      const actionBtn = li.querySelector(".cancel");
+      if (resetBtn) resetBtn.disabled = !expired;
+      if (actionBtn) actionBtn.textContent = expired ? "삭제" : "취소";
     });
+    updateVariableBtn();
+  }
+
+  // "가변 시간" 버튼에 가장 가까운 대기중 알림의 남은시간을 표시(앱의 동적 라벨과 동일).
+  function updateVariableBtn() {
+    const now = Date.now();
+    const pending = reminders.filter((r) => r.recurrence !== "hourly" && r.fire_at > now);
+    if (!pending.length) { variableBtn.textContent = "가변 시간"; return; }
+    const nearest = pending.reduce((a, b) => (a.fire_at < b.fire_at ? a : b));
+    variableBtn.textContent = `가변 ${fmtRemain(nearest.fire_at - now)} 남음`;
   }
 
   function renderControls() {
