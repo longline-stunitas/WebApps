@@ -344,8 +344,52 @@ button:active { transform: scale(0.97); }
   color: var(--text);
 }
 .modal-card .att-actions { margin-top: 0.3rem; }
-.picker-row { display: flex; gap: 0.5rem; }
-.picker-row .btn-line { width: auto; flex: 1; min-width: 0; margin: 0; }
+
+/* ── 가변 알림 시/분 피커(UIPickerView 느낌의 세로 스크롤 휠) ── */
+/* 아이템 높이(40px)는 screens/alarm.js의 WHEEL_ITEM_H와 반드시 일치해야 함 */
+.wheel-picker {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 200px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.wheel-highlight {
+  position: absolute;
+  left: 0.5rem;
+  right: 0.5rem;
+  top: 80px;
+  height: 40px;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  pointer-events: none;
+}
+.wheel-col {
+  flex: 1;
+  height: 200px;
+  min-width: 0;
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding: 80px 0;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, black 55px, black 145px, transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, black 55px, black 145px, transparent 100%);
+}
+.wheel-col::-webkit-scrollbar { display: none; }
+.wheel-item {
+  height: 40px;
+  line-height: 40px;
+  text-align: center;
+  scroll-snap-align: center;
+  color: var(--muted);
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+.wheel-item.active { color: var(--text); font-weight: 700; font-size: 1.2rem; }
+.wheel-unit { color: var(--muted); font-size: 0.85rem; padding: 0 0.4rem; flex-shrink: 0; }
 
 /* ── 유튜브 ── */
 /* 상단 고정 영역: #app 스크롤 시 제목~요약까지 붙박이, 그 아래 리스트만 스크롤 */
