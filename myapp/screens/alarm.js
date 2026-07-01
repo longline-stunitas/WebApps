@@ -68,8 +68,8 @@ export function mount(root) {
   // 정시 알림 토글 — 별도 줄 없이 "추가" 옆에 배치(리스트 영역을 넓게 확보).
   const hourlyBtn = el("button", { className: "btn-line", textContent: "정시", onclick: toggleHourly });
 
-  // 가변 알림 추가 — 앱(STBlankProject)의 "가변 시간" 버튼처럼 가까운 예약의 남은시간을 표시.
-  const variableBtn = el("button", { className: "btn-line", textContent: "가변 시간", onclick: openPicker });
+  // 가변 알림 추가 — 앱(STBlankProject)의 "가변 시간" 버튼처럼 가까운 예약의 종료 시각/남은시간을 표시.
+  const variableBtn = el("button", { className: "btn-line", textContent: "시간", onclick: openPicker });
   const pickerBtn = el("button", { className: "btn-line", textContent: "추가", onclick: openPicker });
   const presetRow = el("div", { className: "preset-row" },
     PRESETS.map((m) => el("button", { className: "preset", textContent: `${m}분`, onclick: () => addOnce(m, "타임 알람") }))
@@ -265,13 +265,13 @@ export function mount(root) {
     updateVariableBtn();
   }
 
-  // "가변 시간" 버튼에 가장 가까운 대기중 알림의 남은시간을 표시(앱의 동적 라벨과 동일).
+  // "시간" 버튼에 가장 가까운 대기중 알림의 종료 시각 + 남은시간을 표시(앱의 동적 라벨과 동일 — 리스트 항목과 같은 포맷).
   function updateVariableBtn() {
     const now = Date.now();
     const pending = reminders.filter((r) => r.recurrence !== "hourly" && r.fire_at > now);
-    if (!pending.length) { variableBtn.textContent = "가변 시간"; return; }
+    if (!pending.length) { variableBtn.textContent = "시간"; return; }
     const nearest = pending.reduce((a, b) => (a.fire_at < b.fire_at ? a : b));
-    variableBtn.textContent = `가변 ${fmtRemain(nearest.fire_at - now)} 남음`;
+    variableBtn.textContent = `${fmtTime(nearest.fire_at)} · 남은 ${fmtRemain(nearest.fire_at - now)}`;
   }
 
   function renderControls() {
