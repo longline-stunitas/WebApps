@@ -91,8 +91,16 @@ export function mount(root) {
   root.appendChild(controls);
 
   // ── 동작 ──
+  // STBlankProject 자체엔 없는 동작이지만(같은 시간이어도 그냥 계속 쌓임), 대기중인 알림과
+  // 설정한 분(duration)이 같으면 중복 추가를 막는다 — 같은 타이머를 여러 개 걸 이유가 없음.
+  function findActiveDuplicate(minutes) {
+    const now = Date.now();
+    return reminders.find((r) => r.recurrence !== "hourly" && r.fire_at > now && getDuration(r.id) === minutes);
+  }
+
   async function addOnce(minutes, label) {
     if (!minutes || minutes <= 0) return setStatus("분을 올바르게 입력하세요.");
+    if (findActiveDuplicate(minutes)) return setStatus("이미 같은 시간으로 설정된 알림이 있습니다.");
     try {
       const res = await addReminder({ type: "once", minutes, title: label, body: `${minutes}분 뒤 알림입니다.` });
       if (res && res.id) saveDuration(res.id, minutes);
@@ -199,9 +207,15 @@ export function mount(root) {
 
   function renderList(cancelledLedger) {
     listEl.innerHTML = "";
+    const now = Date.now();
     const once = reminders.filter((r) => r.recurrence !== "hourly").map((r) => ({ ...r, cancelled: false }));
     const cancelled = cancelledLedger.map((r) => ({ ...r, cancelled: true }));
-    const merged = [...once, ...cancelled].sort((a, b) => a.fire_at - b.fire_at);
+    const all = [...once, ...cancelled];
+    // 앱과 동일한 정렬 규칙: 대기중은 가까운 시각순(fire_at), 취소·완료는 설정했던 시간값(분)순.
+    const active = all.filter((r) => !r.cancelled && r.fire_at > now).sort((a, b) => a.fire_at - b.fire_at);
+    const finished = all.filter((r) => r.cancelled || r.fire_at <= now)
+      .sort((a, b) => (getDuration(a.id) ?? Infinity) - (getDuration(b.id) ?? Infinity));
+    const merged = [...active, ...finished];
     if (!merged.length) {
       listEl.appendChild(el("li", { className: "empty" }, "예약된 알림이 없습니다."));
       return;
