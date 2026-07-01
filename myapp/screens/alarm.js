@@ -21,6 +21,15 @@ function saveDuration(id, minutes) {
 function getDuration(id) {
   return get(DURATIONS_KEY, {})[id];
 }
+// "1시간 10분" 형태로 — 시간이 0이면 분만 표기.
+function durationLabel(minutes) {
+  const total = Math.max(0, Math.round(minutes || 0));
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h <= 0) return `${m}분`;
+  if (m <= 0) return `${h}시간`;
+  return `${h}시간 ${m}분`;
+}
 // 서버 목록 + 취소 목록에 모두 없는 id는 기억해둘 필요 없음 — reload마다 정리.
 function pruneDurations(ids) {
   const map = get(DURATIONS_KEY, {});
@@ -222,6 +231,8 @@ export function mount(root) {
     }
     for (const r of merged) {
       const finished = r.cancelled || r.fire_at <= Date.now();
+      // 가변/타임 알람을 구분하지 않고, 설정했던 시간값(분)으로 표기 — 중복 방지 덕에 값 자체가 곧 식별자 역할을 함.
+      const prefixSpan = el("span", {}, `알림(${durationLabel(getDuration(r.id))}) 종료: ${fmtTime(r.fire_at)} `);
       // el()은 Object.assign으로 props를 적용하므로 "data-*"는 실제 속성으로 반영되지 않음(getAttribute로 못 읽힘) — setAttribute로 직접 설정.
       const remainSpan = el("span", { className: "remain" });
       remainSpan.setAttribute("data-fire", String(r.fire_at));
@@ -236,11 +247,7 @@ export function mount(root) {
         onclick: () => ((r.cancelled || r.fire_at <= Date.now()) ? deleteAlarm(r) : cancelAlarm(r)),
       });
       const li = el("li", {}, [
-        el("span", { className: "rmd-text" }, [
-          el("b", {}, r.title || "알림"),
-          el("span", { className: "rmd-when" }, ` ${fmtTime(r.fire_at)}`),
-          remainSpan,
-        ]),
+        el("span", { className: "rmd-text" }, [prefixSpan, remainSpan]),
         el("div", { className: "rmd-actions" }, [resetBtn, actionBtn]),
       ]);
       listEl.appendChild(li);
@@ -262,13 +269,13 @@ export function mount(root) {
       const left = fire - now;
       const finished = cancelled || left <= 0;
       if (cancelled) {
-        span.textContent = " · 취소됨";
+        span.textContent = "· 취소됨";
         span.classList.add("done");
       } else if (finished) {
-        span.textContent = " · 완료됨";
+        span.textContent = "· 완료됨";
         span.classList.add("done");
       } else {
-        span.textContent = ` · 남은 ${fmtRemain(left)}`;
+        span.textContent = `· 남은시간: ${fmtRemain(left)}`;
         span.classList.remove("done");
       }
       const resetBtn = li.querySelector(".reset");

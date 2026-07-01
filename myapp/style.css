@@ -217,9 +217,9 @@ button:active { transform: scale(0.97); }
   font-size: 0.88rem;
 }
 .reminders li.empty { justify-content: center; background: transparent; }
-.rmd-text { display: flex; flex-direction: column; gap: 0.15rem; }
-.rmd-when { color: var(--muted); font-size: 0.8rem; }
-.remain { color: var(--accent); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+/* 한 줄 표기 — 좁은 화면에서는 줄바꿈 대신 말줄임(ellipsis)으로 축약 */
+.rmd-text { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.remain { color: var(--accent); font-variant-numeric: tabular-nums; }
 .remain.done { color: var(--muted); }
 .rmd-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
 .cancel {
