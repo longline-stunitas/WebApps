@@ -25,6 +25,9 @@ function urlBase64ToUint8Array(base64String) {
 }
 
 export async function getSubscription() {
+  // app.js가 registerSW()를 fire-and-forget으로 호출하므로, 화면이 이보다 먼저 마운트되면
+  // swReg가 아직 null일 수 있다(특히 콜드 스타트 직후). 여기서 직접 기다려 레이스를 없앤다.
+  if (!swReg) await registerSW();
   if (!swReg) return null;
   return swReg.pushManager.getSubscription();
 }
