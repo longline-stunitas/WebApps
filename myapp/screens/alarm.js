@@ -1,14 +1,17 @@
 // 알림 화면 — 구 "걸음수" 화면에서 걸음수/셀룰러/충전 제외.
 // 실시간 시계 · 정시 알림 토글 · 가변(N분 뒤) 알림 + 프리셋.
 import { get, set } from "../lib/store.js";
-import { el, setStatus, fmtRemain, fmtTime } from "../lib/ui.js";
+import { el, setStatus, fmtRemain, fmtTime, confirmDialog } from "../lib/ui.js";
 import { isPushEnabled, enablePush, addReminder, listReminders, cancelReminder } from "../lib/push.js";
 
 export const title = "알림";
 
 const PRESETS = [5, 10, 15, 30, 60];
-const PICKER_KEY = "alarmPickerTime"; // 마지막 선택 시:분:초 기억 (STBlankProject 가변알림과 동일한 방식)
+const PICKER_KEY = "alarmPickerHM"; // 마지막 선택 시간/분 기억 { h, m } — 특정 시각이 아니라 "지금으로부터" 걸리는 시간(듀레이션)
 const DURATIONS_KEY = "alarmDurations"; // { reminderId: minutes } — 서버는 fire_at만 갖고 있어 "재설정"용 원래 분값을 기기에 따로 기억해둔다.
+// 서버는 취소=완전삭제만 지원(수정/soft-cancel API 없음). 앱(STBlankProject)처럼 "취소" 후에도
+// 목록에 "취소됨"으로 남겨두려고, 취소된 항목만 기기에 따로 기억해뒀다가 서버 목록과 합쳐서 보여준다.
+const CANCELLED_KEY = "alarmCancelled"; // [{ id, title, fire_at }]
 
 function saveDuration(id, minutes) {
   const map = get(DURATIONS_KEY, {});
@@ -18,7 +21,7 @@ function saveDuration(id, minutes) {
 function getDuration(id) {
   return get(DURATIONS_KEY, {})[id];
 }
-// 서버 목록에 더 이상 없는 id는 기억해둘 필요 없음 — reload마다 정리.
+// 서버 목록 + 취소 목록에 모두 없는 id는 기억해둘 필요 없음 — reload마다 정리.
 function pruneDurations(ids) {
   const map = get(DURATIONS_KEY, {});
   const keep = new Set(ids);
@@ -27,6 +30,18 @@ function pruneDurations(ids) {
     if (!keep.has(k)) { delete map[k]; changed = true; }
   }
   if (changed) set(DURATIONS_KEY, map);
+}
+
+function getCancelledLedger() {
+  return get(CANCELLED_KEY, []);
+}
+function addToCancelledLedger(r) {
+  const list = getCancelledLedger().filter((c) => c.id !== r.id);
+  list.push({ id: r.id, title: r.title, fire_at: r.fire_at });
+  set(CANCELLED_KEY, list);
+}
+function removeFromCancelledLedger(id) {
+  set(CANCELLED_KEY, getCancelledLedger().filter((c) => c.id !== id));
 }
 
 export function mount(root) {
@@ -94,18 +109,28 @@ export function mount(root) {
     const minutes = getDuration(r.id);
     if (!minutes) return setStatus("이 알림은 다시 설정할 수 없습니다.");
     try { await cancelReminder(r.id); } catch {}
+    removeFromCancelledLedger(r.id);
     await addOnce(minutes, r.title);
   }
 
-  // STBlankProject 가변알림의 "추가" 버튼과 동일한 흐름: 시:분:초 피커로 값을 고르면
-  // 그 값을 목표 시각까지 남은 시간으로 환산해 addOnce로 예약한다(리스트는 아래쪽 listEl 그대로 사용).
+  // STBlankProject 가변알림의 "추가" 버튼과 동일한 흐름: 시/분 피커(듀레이션 — 특정 시각이 아니라
+  // "지금으로부터 몇 시간 몇 분 뒤")로 값을 고르면 addOnce로 예약한다(리스트는 아래쪽 listEl 그대로 사용).
   function openPicker() {
-    const timeInput = el("input", { type: "time", step: "1", value: get(PICKER_KEY, "00:05:00") });
+    const last = get(PICKER_KEY, { h: 0, m: 5 });
+    const hourSelect = el("select", {},
+      Array.from({ length: 24 }, (_, h) => el("option", { value: String(h) }, `${h}시간`))
+    );
+    const minuteSelect = el("select", {},
+      Array.from({ length: 60 }, (_, m) => el("option", { value: String(m) }, `${m}분`))
+    );
+    hourSelect.value = String(last.h);
+    minuteSelect.value = String(last.m);
     const okBtn = el("button", { className: "btn-line", textContent: "확인" });
     const cancelBtn = el("button", { className: "btn-line", textContent: "취소" });
     const card = el("div", { className: "modal-card" }, [
       el("h3", { className: "modal-title" }, "가변 알림 추가"),
-      timeInput,
+      el("p", { className: "hint" }, "지금으로부터 몇 시간 몇 분 뒤에 울릴지 선택하세요."),
+      el("div", { className: "picker-row" }, [hourSelect, minuteSelect]),
       el("div", { className: "att-actions" }, [cancelBtn, okBtn]),
     ]);
     const layer = el("div", { className: "modal" }, [card]);
@@ -113,11 +138,11 @@ export function mount(root) {
     cancelBtn.onclick = close;
     layer.onclick = (e) => { if (e.target === layer) close(); };
     okBtn.onclick = () => {
-      const parts = (timeInput.value || "").split(":").map(Number);
-      const [h = 0, m = 0, s = 0] = parts;
-      const minutes = h * 60 + m + s / 60;
+      const h = Number(hourSelect.value);
+      const m = Number(minuteSelect.value);
+      const minutes = h * 60 + m;
       if (!minutes || minutes <= 0) return setStatus("시간을 올바르게 선택하세요.");
-      set(PICKER_KEY, timeInput.value);
+      set(PICKER_KEY, { h, m });
       close();
       addOnce(minutes, "가변 알림");
     };
@@ -140,16 +165,31 @@ export function mount(root) {
     }
   }
 
-  async function cancel(id) {
-    await cancelReminder(id);
+  // "취소"는 서버에서 완전 삭제(예약 발송을 실제로 막기 위함)하되, 앱처럼 목록에는
+  // "취소됨" 상태로 남겨서 나중에 "재설정"으로 다시 걸 수 있게 한다.
+  async function cancelAlarm(r) {
+    const ok = await confirmDialog("이 알림을 취소하시겠습니까?", { okText: "예", cancelText: "아니오", danger: true });
+    if (!ok) return;
+    try { await cancelReminder(r.id); } catch {}
+    addToCancelledLedger(r);
+    await reload();
+  }
+
+  // "삭제"는 목록에서 완전히 없앤다(취소됨/완료됨 상태에서만 노출).
+  async function deleteAlarm(r) {
+    const ok = await confirmDialog("이 알림을 삭제하시겠습니까?", { okText: "예", cancelText: "아니오", danger: true });
+    if (!ok) return;
+    removeFromCancelledLedger(r.id);
+    try { await cancelReminder(r.id); } catch {}
     await reload();
   }
 
   async function reload() {
     reminders = await listReminders();
-    pruneDurations(reminders.map((r) => r.id));
+    const cancelledLedger = getCancelledLedger();
+    pruneDurations([...reminders.map((r) => r.id), ...cancelledLedger.map((r) => r.id)]);
     renderHourly();
-    renderList();
+    renderList(cancelledLedger);
   }
 
   function renderHourly() {
@@ -157,21 +197,30 @@ export function mount(root) {
     hourlyBtn.classList.toggle("on", on);
   }
 
-  function renderList() {
+  function renderList(cancelledLedger) {
     listEl.innerHTML = "";
-    const once = reminders.filter((r) => r.recurrence !== "hourly").sort((a, b) => a.fire_at - b.fire_at);
-    if (!once.length) {
+    const once = reminders.filter((r) => r.recurrence !== "hourly").map((r) => ({ ...r, cancelled: false }));
+    const cancelled = cancelledLedger.map((r) => ({ ...r, cancelled: true }));
+    const merged = [...once, ...cancelled].sort((a, b) => a.fire_at - b.fire_at);
+    if (!merged.length) {
       listEl.appendChild(el("li", { className: "empty" }, "예약된 알림이 없습니다."));
       return;
     }
-    for (const r of once) {
-      const expired = r.fire_at <= Date.now();
+    for (const r of merged) {
+      const finished = r.cancelled || r.fire_at <= Date.now();
       // el()은 Object.assign으로 props를 적용하므로 "data-*"는 실제 속성으로 반영되지 않음(getAttribute로 못 읽힘) — setAttribute로 직접 설정.
       const remainSpan = el("span", { className: "remain" });
       remainSpan.setAttribute("data-fire", String(r.fire_at));
-      // 앱의 셀과 동일한 상태 규칙: 대기중엔 "취소"만 동작(재설정 비활성), 완료되면 "재설정"이 켜지고 "삭제"로 바뀜.
-      const resetBtn = el("button", { className: "reset", textContent: "재설정", disabled: !expired, onclick: () => resetAlarm(r) });
-      const actionBtn = el("button", { className: "cancel", textContent: expired ? "삭제" : "취소", onclick: () => cancel(r.id) });
+      remainSpan.setAttribute("data-cancelled", r.cancelled ? "1" : "0");
+      // 앱의 셀과 동일한 상태 규칙: 대기중엔 "취소"만 동작(재설정 비활성), 취소·완료되면 "재설정"이 켜지고 "삭제"로 바뀜.
+      const resetBtn = el("button", { className: "reset", textContent: "재설정", disabled: !finished, onclick: () => resetAlarm(r) });
+      const actionBtn = el("button", {
+        className: "cancel",
+        textContent: finished ? "삭제" : "취소",
+        // 초 단위 updateRemains()가 텍스트/버튼 상태만 갱신하고 onclick은 다시 안 묶으므로,
+        // 렌더링 시점의 finished를 캡처하지 않고 클릭 시점에 다시 판정한다.
+        onclick: () => ((r.cancelled || r.fire_at <= Date.now()) ? deleteAlarm(r) : cancelAlarm(r)),
+      });
       const li = el("li", {}, [
         el("span", { className: "rmd-text" }, [
           el("b", {}, r.title || "알림"),
@@ -194,10 +243,14 @@ export function mount(root) {
     listEl.querySelectorAll("li").forEach((li) => {
       const span = li.querySelector(".remain");
       if (!span) return;
+      const cancelled = span.getAttribute("data-cancelled") === "1";
       const fire = Number(span.getAttribute("data-fire"));
       const left = fire - now;
-      const expired = left <= 0;
-      if (expired) {
+      const finished = cancelled || left <= 0;
+      if (cancelled) {
+        span.textContent = " · 취소됨";
+        span.classList.add("done");
+      } else if (finished) {
         span.textContent = " · 완료됨";
         span.classList.add("done");
       } else {
@@ -206,8 +259,8 @@ export function mount(root) {
       }
       const resetBtn = li.querySelector(".reset");
       const actionBtn = li.querySelector(".cancel");
-      if (resetBtn) resetBtn.disabled = !expired;
-      if (actionBtn) actionBtn.textContent = expired ? "삭제" : "취소";
+      if (resetBtn) resetBtn.disabled = !finished;
+      if (actionBtn) actionBtn.textContent = finished ? "삭제" : "취소";
     });
     updateVariableBtn();
   }

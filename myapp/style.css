@@ -333,7 +333,8 @@ button:active { transform: scale(0.97); }
   gap: 0.6rem;
 }
 .modal-title { font-size: 1.05rem; margin-bottom: 0.2rem; }
-.modal-card input {
+.modal-card input,
+.modal-card select {
   padding: 0.6rem;
   font-size: 1rem;
   border: 1px solid var(--line);
@@ -342,6 +343,8 @@ button:active { transform: scale(0.97); }
   color: var(--text);
 }
 .modal-card .att-actions { margin-top: 0.3rem; }
+.picker-row { display: flex; gap: 0.5rem; }
+.picker-row select { flex: 1; min-width: 0; }
 
 /* ── 유튜브 ── */
 /* 상단 고정 영역: #app 스크롤 시 제목~요약까지 붙박이, 그 아래 리스트만 스크롤 */
