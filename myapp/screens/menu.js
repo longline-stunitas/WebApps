@@ -25,8 +25,9 @@ function openBackup() {
     onclick: async () => {
       const file = new File([json], fname, { type: "application/json" });
       // iOS PWA: 공유 시트로 파일 앱/메모 등에 저장. 미지원이면 다운로드.
+      // title/text를 같이 넘기면 일부 공유 대상(메모 등)이 파일과 별개로 텍스트 항목을 하나 더 만듦 — file만 전달.
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: "myapp 백업" }); return; } catch { /* 취소 등 */ }
+        try { await navigator.share({ files: [file] }); return; } catch { /* 취소 등 */ }
       }
       const url = URL.createObjectURL(file);
       const a = el("a", { href: url, download: fname });

@@ -10,5 +10,5 @@ window.PUSH_CONFIG = {
 
   // 배포 버전 — 메뉴 화면 하단에 표시. 배포(코드 변경)할 때마다 sw.js의 CACHE와 함께 올린다.
   // 폰에서 이 숫자가 바뀌면 새 버전이 반영된 것.
-  APP_VERSION: "v37",
+  APP_VERSION: "v38",
 };
