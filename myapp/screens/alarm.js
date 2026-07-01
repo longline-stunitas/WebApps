@@ -1,7 +1,7 @@
 // 알림 화면 — 구 "걸음수" 화면에서 걸음수/셀룰러/충전 제외.
 // 실시간 시계 · 정시 알림 토글 · 가변(N분 뒤) 알림 + 프리셋.
 import { get, set } from "../lib/store.js";
-import { el, setStatus, fmtRemain, fmtTime, confirmDialog } from "../lib/ui.js";
+import { el, setStatus, fmtRemain, fmtTime, confirmDialog, selectSheet } from "../lib/ui.js";
 import { isPushEnabled, enablePush, addReminder, listReminders, cancelReminder } from "../lib/push.js";
 
 export const title = "알림";
@@ -132,22 +132,32 @@ export function mount(root) {
 
   // STBlankProject 가변알림의 "추가" 버튼과 동일한 흐름: 시/분 피커(듀레이션 — 특정 시각이 아니라
   // "지금으로부터 몇 시간 몇 분 뒤")로 값을 고르면 addOnce로 예약한다(리스트는 아래쪽 listEl 그대로 사용).
+  // 네이티브 <select>는 iOS에서 닫힌 상태 UI가 어색해서, 앱 전체에서 이미 쓰는 커스텀
+  // 선택시트(selectSheet — 배경과 통일된 다크테마 레이어)로 시/분을 고르게 한다.
   function openPicker() {
     const last = get(PICKER_KEY, { h: 0, m: 5 });
-    const hourSelect = el("select", {},
-      Array.from({ length: 24 }, (_, h) => el("option", { value: String(h) }, `${h}시간`))
-    );
-    const minuteSelect = el("select", {},
-      Array.from({ length: 60 }, (_, m) => el("option", { value: String(m) }, `${m}분`))
-    );
-    hourSelect.value = String(last.h);
-    minuteSelect.value = String(last.m);
+    let h = last.h;
+    let m = last.m;
+
+    const hourBtn = el("button", { className: "btn-line", textContent: `${h}시간` });
+    const minuteBtn = el("button", { className: "btn-line", textContent: `${m}분` });
+    hourBtn.onclick = async () => {
+      const picked = await selectSheet("시간 선택",
+        [{ items: Array.from({ length: 24 }, (_, i) => ({ value: i, label: `${i}시간` })) }], h);
+      if (picked != null) { h = picked; hourBtn.textContent = `${h}시간`; }
+    };
+    minuteBtn.onclick = async () => {
+      const picked = await selectSheet("분 선택",
+        [{ items: Array.from({ length: 60 }, (_, i) => ({ value: i, label: `${i}분` })) }], m);
+      if (picked != null) { m = picked; minuteBtn.textContent = `${m}분`; }
+    };
+
     const okBtn = el("button", { className: "btn-line", textContent: "확인" });
     const cancelBtn = el("button", { className: "btn-line", textContent: "취소" });
     const card = el("div", { className: "modal-card" }, [
       el("h3", { className: "modal-title" }, "가변 알림 추가"),
       el("p", { className: "hint" }, "지금으로부터 몇 시간 몇 분 뒤에 울릴지 선택하세요."),
-      el("div", { className: "picker-row" }, [hourSelect, minuteSelect]),
+      el("div", { className: "picker-row" }, [hourBtn, minuteBtn]),
       el("div", { className: "att-actions" }, [cancelBtn, okBtn]),
     ]);
     const layer = el("div", { className: "modal" }, [card]);
@@ -155,8 +165,6 @@ export function mount(root) {
     cancelBtn.onclick = close;
     layer.onclick = (e) => { if (e.target === layer) close(); };
     okBtn.onclick = () => {
-      const h = Number(hourSelect.value);
-      const m = Number(minuteSelect.value);
       const minutes = h * 60 + m;
       if (!minutes || minutes <= 0) return setStatus("시간을 올바르게 선택하세요.");
       set(PICKER_KEY, { h, m });

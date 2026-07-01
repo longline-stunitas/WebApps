@@ -217,8 +217,9 @@ button:active { transform: scale(0.97); }
   font-size: 0.88rem;
 }
 .reminders li.empty { justify-content: center; background: transparent; }
-/* 한 줄 표기 — 좁은 화면에서는 줄바꿈 대신 말줄임(ellipsis)으로 축약 */
-.rmd-text { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* 첫 줄(알림 시간/종료 시각) · 둘째 줄(남은시간/완료·취소) — 폰 폭에서 잘리지 않게 두 줄로 분리 */
+.rmd-text { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0; }
+.rmd-text > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .remain { color: var(--accent); font-variant-numeric: tabular-nums; }
 .remain.done { color: var(--muted); }
 .rmd-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
@@ -344,7 +345,7 @@ button:active { transform: scale(0.97); }
 }
 .modal-card .att-actions { margin-top: 0.3rem; }
 .picker-row { display: flex; gap: 0.5rem; }
-.picker-row select { flex: 1; min-width: 0; }
+.picker-row .btn-line { width: auto; flex: 1; min-width: 0; margin: 0; }
 
 /* ── 유튜브 ── */
 /* 상단 고정 영역: #app 스크롤 시 제목~요약까지 붙박이, 그 아래 리스트만 스크롤 */
