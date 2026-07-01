@@ -55,6 +55,7 @@ function removeFromCancelledLedger(id) {
 
 export function mount(root) {
   let reminders = [];
+  let cancelledLedger = [];
   let pushOn = false;
   let pollTimer = null;
   let tickTimer = null;
@@ -100,16 +101,26 @@ export function mount(root) {
   root.appendChild(controls);
 
   // ── 동작 ──
-  // STBlankProject 자체엔 없는 동작이지만(같은 시간이어도 그냥 계속 쌓임), 대기중인 알림과
-  // 설정한 분(duration)이 같으면 중복 추가를 막는다 — 같은 타이머를 여러 개 걸 이유가 없음.
-  function findActiveDuplicate(minutes) {
-    const now = Date.now();
-    return reminders.find((r) => r.recurrence !== "hourly" && r.fire_at > now && getDuration(r.id) === minutes);
+  // STBlankProject 자체엔 없는 동작이지만(같은 시간이어도 그냥 계속 쌓임), 리스트에 표기된
+  // 시간값(분)이 같으면 추가를 막는다 — 대기중뿐 아니라 취소·완료된 항목도 목록에 그대로
+  // 남아있으니(현재 표기가 곧 시간값이라) 상태와 무관하게 같은 값이면 중복으로 본다.
+  // 이미 있는 시간을 다시 걸고 싶으면 그 항목의 "재설정"을 쓰면 됨.
+  function findDuplicateDuration(minutes) {
+    const inReminders = reminders.some((r) => r.recurrence !== "hourly" && getDuration(r.id) === minutes);
+    if (inReminders) return true;
+    return cancelledLedger.some((r) => getDuration(r.id) === minutes);
   }
+
+  // 서버 응답이 오기 전(reload 완료 전)에 같은 버튼을 연타하면 reminders가 아직 갱신 전이라
+  // 중복 검사를 통과해버림 — 요청 "진행 중"인 분(minutes)도 동기적으로 기억해서 막는다.
+  const pendingDurations = new Set();
 
   async function addOnce(minutes, label) {
     if (!minutes || minutes <= 0) return setStatus("분을 올바르게 입력하세요.");
-    if (findActiveDuplicate(minutes)) return setStatus("이미 같은 시간으로 설정된 알림이 있습니다.");
+    if (findDuplicateDuration(minutes) || pendingDurations.has(minutes)) {
+      return setStatus("이미 같은 시간의 알림이 목록에 있습니다. 재설정을 이용해 주세요.");
+    }
+    pendingDurations.add(minutes);
     try {
       const res = await addReminder({ type: "once", minutes, title: label, body: `${minutes}분 뒤 알림입니다.` });
       if (res && res.id) saveDuration(res.id, minutes);
@@ -117,6 +128,8 @@ export function mount(root) {
       await reload();
     } catch (e) {
       setStatus("예약 실패: " + e.message);
+    } finally {
+      pendingDurations.delete(minutes);
     }
   }
 
@@ -127,6 +140,10 @@ export function mount(root) {
     if (!minutes) return setStatus("이 알림은 다시 설정할 수 없습니다.");
     try { await cancelReminder(r.id); } catch {}
     removeFromCancelledLedger(r.id);
+    // in-memory 상태도 즉시 걷어내야 함 — 다음 reload() 전까지 남아있으면 addOnce의 중복
+    // 검사(findDuplicateDuration)가 방금 지운 자기 자신을 발견해 재설정을 막아버린다.
+    reminders = reminders.filter((x) => x.id !== r.id);
+    cancelledLedger = cancelledLedger.filter((x) => x.id !== r.id);
     await addOnce(minutes, r.title);
   }
 
@@ -230,7 +247,7 @@ export function mount(root) {
 
   async function reload() {
     reminders = await listReminders();
-    const cancelledLedger = getCancelledLedger();
+    cancelledLedger = getCancelledLedger();
     pruneDurations([...reminders.map((r) => r.id), ...cancelledLedger.map((r) => r.id)]);
     renderHourly();
     renderList(cancelledLedger);
