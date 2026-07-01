@@ -9,9 +9,11 @@ export const title = "알림";
 const PRESETS = [5, 10, 15, 30, 60];
 const PICKER_KEY = "alarmPickerHM"; // 마지막 선택 시간/분 기억 { h, m } — 특정 시각이 아니라 "지금으로부터" 걸리는 시간(듀레이션)
 const DURATIONS_KEY = "alarmDurations"; // { reminderId: minutes } — 서버는 fire_at만 갖고 있어 "재설정"용 원래 분값을 기기에 따로 기억해둔다.
-// 서버는 취소=완전삭제만 지원(수정/soft-cancel API 없음). 앱(STBlankProject)처럼 "취소" 후에도
-// 목록에 "취소됨"으로 남겨두려고, 취소된 항목만 기기에 따로 기억해뒀다가 서버 목록과 합쳐서 보여준다.
-const CANCELLED_KEY = "alarmCancelled"; // [{ id, title, fire_at }]
+// 서버는 취소=완전삭제, 완료=cron이 곧 삭제(수정/soft-cancel API 없음)만 지원한다. 앱(STBlankProject)처럼
+// 취소·완료된 알림도 목록에 계속 남기려고(같은 분(duration) 알림을 여러 개 동시에 돌리는 것도 허용해야 하므로,
+// 중복 방지가 아니라 "완료/취소 기록 보존" 목적), 기기에 별도로 영구 기록해뒀다가 서버 목록과 합쳐서 보여준다.
+// "삭제"를 눌러야만 이 기록에서 없어지고, "재설정"을 눌러도 기존 기록은 그대로 남고 새 대기 항목만 추가된다.
+const HISTORY_KEY = "alarmHistory"; // [{ id, title, fire_at, cancelled }]
 
 function saveDuration(id, minutes) {
   const map = get(DURATIONS_KEY, {});
@@ -41,21 +43,23 @@ function pruneDurations(ids) {
   if (changed) set(DURATIONS_KEY, map);
 }
 
-function getCancelledLedger() {
-  return get(CANCELLED_KEY, []);
+function getHistory() {
+  return get(HISTORY_KEY, []);
 }
-function addToCancelledLedger(r) {
-  const list = getCancelledLedger().filter((c) => c.id !== r.id);
-  list.push({ id: r.id, title: r.title, fire_at: r.fire_at });
-  set(CANCELLED_KEY, list);
+// id 기준으로만 중복을 막는다(같은 레코드가 이력에 두 번 들어가는 것 방지) — 시간값(분)이
+// 같은 서로 다른 레코드가 여러 개 있는 것은 정상이며 막지 않는다.
+function addToHistory(r, cancelled) {
+  const list = getHistory().filter((c) => c.id !== r.id);
+  list.push({ id: r.id, title: r.title, fire_at: r.fire_at, cancelled });
+  set(HISTORY_KEY, list);
 }
-function removeFromCancelledLedger(id) {
-  set(CANCELLED_KEY, getCancelledLedger().filter((c) => c.id !== id));
+function removeFromHistory(id) {
+  set(HISTORY_KEY, getHistory().filter((c) => c.id !== id));
 }
 
 export function mount(root) {
   let reminders = [];
-  let cancelledLedger = [];
+  let historyLedger = [];
   let pushOn = false;
   let pollTimer = null;
   let tickTimer = null;
@@ -101,26 +105,11 @@ export function mount(root) {
   root.appendChild(controls);
 
   // ── 동작 ──
-  // STBlankProject 자체엔 없는 동작이지만(같은 시간이어도 그냥 계속 쌓임), 리스트에 표기된
-  // 시간값(분)이 같으면 추가를 막는다 — 대기중뿐 아니라 취소·완료된 항목도 목록에 그대로
-  // 남아있으니(현재 표기가 곧 시간값이라) 상태와 무관하게 같은 값이면 중복으로 본다.
-  // 이미 있는 시간을 다시 걸고 싶으면 그 항목의 "재설정"을 쓰면 됨.
-  function findDuplicateDuration(minutes) {
-    const inReminders = reminders.some((r) => r.recurrence !== "hourly" && getDuration(r.id) === minutes);
-    if (inReminders) return true;
-    return cancelledLedger.some((r) => getDuration(r.id) === minutes);
-  }
-
-  // 서버 응답이 오기 전(reload 완료 전)에 같은 버튼을 연타하면 reminders가 아직 갱신 전이라
-  // 중복 검사를 통과해버림 — 요청 "진행 중"인 분(minutes)도 동기적으로 기억해서 막는다.
-  const pendingDurations = new Set();
-
+  // 같은 시간값(분)이라도 대기중인 알림은 여러 개가 동시에 돌아갈 수 있어야 하므로
+  // 중복 방지를 하지 않는다(STBlankProject 원본과 동일). 완료/취소된 기록 쪽은 addToHistory가
+  // id 기준으로만 걸러내 같은 레코드가 두 번 들어가는 것만 막는다.
   async function addOnce(minutes, label) {
     if (!minutes || minutes <= 0) return setStatus("분을 올바르게 입력하세요.");
-    if (findDuplicateDuration(minutes) || pendingDurations.has(minutes)) {
-      return setStatus("이미 같은 시간의 알림이 목록에 있습니다. 재설정을 이용해 주세요.");
-    }
-    pendingDurations.add(minutes);
     try {
       const res = await addReminder({ type: "once", minutes, title: label, body: `${minutes}분 뒤 알림입니다.` });
       if (res && res.id) saveDuration(res.id, minutes);
@@ -128,22 +117,14 @@ export function mount(root) {
       await reload();
     } catch (e) {
       setStatus("예약 실패: " + e.message);
-    } finally {
-      pendingDurations.delete(minutes);
     }
   }
 
   // 앱의 "재설정"과 동일: 원래 예약했던 분(duration)을 그대로 재사용해 지금부터 다시 예약.
-  // 서버는 항목을 수정하는 API가 없어(추가/삭제만) 기존 항목은 정리하고 새로 추가한다.
+  // 기존 완료/취소 기록은 그대로 두고(목록에서 사라지지 않음) 새 대기 항목만 추가한다.
   async function resetAlarm(r) {
     const minutes = getDuration(r.id);
     if (!minutes) return setStatus("이 알림은 다시 설정할 수 없습니다.");
-    try { await cancelReminder(r.id); } catch {}
-    removeFromCancelledLedger(r.id);
-    // in-memory 상태도 즉시 걷어내야 함 — 다음 reload() 전까지 남아있으면 addOnce의 중복
-    // 검사(findDuplicateDuration)가 방금 지운 자기 자신을 발견해 재설정을 막아버린다.
-    reminders = reminders.filter((x) => x.id !== r.id);
-    cancelledLedger = cancelledLedger.filter((x) => x.id !== r.id);
     await addOnce(minutes, r.title);
   }
 
@@ -227,30 +208,40 @@ export function mount(root) {
   }
 
   // "취소"는 서버에서 완전 삭제(예약 발송을 실제로 막기 위함)하되, 앱처럼 목록에는
-  // "취소됨" 상태로 남겨서 나중에 "재설정"으로 다시 걸 수 있게 한다.
+  // "취소됨" 상태로 남겨서(이력 보존) 나중에 "재설정"으로 다시 걸 수 있게 한다.
   async function cancelAlarm(r) {
     const ok = await confirmDialog("이 알림을 취소하시겠습니까?", { okText: "예", cancelText: "아니오", danger: true });
     if (!ok) return;
     try { await cancelReminder(r.id); } catch {}
-    addToCancelledLedger(r);
+    addToHistory(r, true);
     await reload();
   }
 
-  // "삭제"는 목록에서 완전히 없앤다(취소됨/완료됨 상태에서만 노출).
+  // "삭제"는 이력에서 완전히 없앤다(취소됨/완료됨 상태에서만 노출) — 이력 기록을 지우는 유일한 방법.
   async function deleteAlarm(r) {
     const ok = await confirmDialog("이 알림을 삭제하시겠습니까?", { okText: "예", cancelText: "아니오", danger: true });
     if (!ok) return;
-    removeFromCancelledLedger(r.id);
+    removeFromHistory(r.id);
     try { await cancelReminder(r.id); } catch {}
     await reload();
   }
 
   async function reload() {
     reminders = await listReminders();
-    cancelledLedger = getCancelledLedger();
-    pruneDurations([...reminders.map((r) => r.id), ...cancelledLedger.map((r) => r.id)]);
+    historyLedger = getHistory();
+    // 방금 자연 종료(시간 경과)된 항목을 이력에 스냅샷으로 남긴다 — 서버(cron)가 곧 지워버리기
+    // 전에 기록해두고, 같은 항목이 또 발송되지 않도록 서버에서도 정리한다.
+    const historyIds = new Set(historyLedger.map((h) => h.id));
+    const now = Date.now();
+    const justExpired = reminders.filter((r) => r.recurrence !== "hourly" && r.fire_at <= now && !historyIds.has(r.id));
+    for (const r of justExpired) {
+      addToHistory(r, false);
+      try { await cancelReminder(r.id); } catch {}
+    }
+    if (justExpired.length) historyLedger = getHistory();
+    pruneDurations([...reminders.map((r) => r.id), ...historyLedger.map((r) => r.id)]);
     renderHourly();
-    renderList(cancelledLedger);
+    renderList(historyLedger);
   }
 
   function renderHourly() {
@@ -258,15 +249,14 @@ export function mount(root) {
     hourlyBtn.classList.toggle("on", on);
   }
 
-  function renderList(cancelledLedger) {
+  function renderList(historyLedger) {
     listEl.innerHTML = "";
     const now = Date.now();
-    const once = reminders.filter((r) => r.recurrence !== "hourly").map((r) => ({ ...r, cancelled: false }));
-    const cancelled = cancelledLedger.map((r) => ({ ...r, cancelled: true }));
-    const all = [...once, ...cancelled];
-    // 앱과 동일한 정렬 규칙: 대기중은 가까운 시각순(fire_at), 취소·완료는 설정했던 시간값(분)순.
-    const active = all.filter((r) => !r.cancelled && r.fire_at > now).sort((a, b) => a.fire_at - b.fire_at);
-    const finished = all.filter((r) => r.cancelled || r.fire_at <= now)
+    // 대기중(서버 기준 아직 안 끝남)은 가까운 시각순, 완료·취소 이력은 설정했던 시간값(분)순 — 앱과 동일.
+    const active = reminders.filter((r) => r.recurrence !== "hourly" && r.fire_at > now)
+      .map((r) => ({ ...r, cancelled: false }))
+      .sort((a, b) => a.fire_at - b.fire_at);
+    const finished = historyLedger.slice()
       .sort((a, b) => (getDuration(a.id) ?? Infinity) - (getDuration(b.id) ?? Infinity));
     const merged = [...active, ...finished];
     if (!merged.length) {
@@ -275,7 +265,7 @@ export function mount(root) {
     }
     for (const r of merged) {
       const finished = r.cancelled || r.fire_at <= Date.now();
-      // 가변/타임 알람을 구분하지 않고, 설정했던 시간값(분)으로 표기 — 중복 방지 덕에 값 자체가 곧 식별자 역할을 함.
+      // 가변/타임 알람을 구분하지 않고, 설정했던 시간값(분)으로 표기 — 같은 값이 여러 개 있어도 무방.
       const prefixSpan = el("span", {}, `알림(${durationLabel(getDuration(r.id))}) 종료: ${fmtTime(r.fire_at)} `);
       // el()은 Object.assign으로 props를 적용하므로 "data-*"는 실제 속성으로 반영되지 않음(getAttribute로 못 읽힘) — setAttribute로 직접 설정.
       const remainSpan = el("span", { className: "remain" });
