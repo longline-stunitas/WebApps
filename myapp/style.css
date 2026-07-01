@@ -182,6 +182,7 @@ button:active { transform: scale(0.97); }
 /* "가변 시간" 버튼(동적으로 길어지는 카운트다운 텍스트)만 줄여서, 오른쪽 버튼들은 항상 원래 크기를 유지 */
 .row > .btn-line {
   width: auto;
+  margin: 0;
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;

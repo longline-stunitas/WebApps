@@ -17,8 +17,13 @@ export function exportJSON() {
   );
 }
 
+// 일자_시간_분까지만 넣어 매번 새 파일명이 되도록(같은 이름 중복 저장 시 "파일 2.json"처럼
+// iOS가 임의로 번호를 붙이는 것을 피함). 초 단위까지는 불필요해 분까지만.
 export function backupFilename() {
-  return "myapp.json";
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
+  return `myapp_${stamp}.json`;
 }
 
 // JSON 문자열 → localStorage 복원. mode: "replace"(기존 전부 교체) | "merge"(겹치면 덮고 나머지 보존).
