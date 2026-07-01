@@ -1,12 +1,11 @@
 // 알림 화면 — 구 "걸음수" 화면에서 걸음수/셀룰러/충전 제외.
-// 실시간 시계 · 정시 알림 토글 · 가변(N분 뒤) 알림 + 프리셋.
+// 실시간 시계 · 정시 알림 토글 · 가변(시/분 뒤) 알림.
 import { get, set } from "../lib/store.js";
 import { el, setStatus, fmtRemain, fmtTime, confirmDialog } from "../lib/ui.js";
 import { isPushEnabled, enablePush, addReminder, listReminders, cancelReminder } from "../lib/push.js";
 
 export const title = "알림";
 
-const PRESETS = [5, 10, 15, 30, 60];
 const PICKER_KEY = "alarmPickerHM"; // 마지막 선택 시간/분 기억 { h, m } — 특정 시각이 아니라 "지금으로부터" 걸리는 시간(듀레이션)
 const DURATIONS_KEY = "alarmDurations"; // { reminderId: minutes } — 서버는 fire_at만 갖고 있어 "재설정"용 원래 분값을 기기에 따로 기억해둔다.
 // 서버는 취소=완전삭제, 완료=cron이 곧 삭제(수정/soft-cancel API 없음)만 지원한다. 앱(STBlankProject)처럼
@@ -85,9 +84,6 @@ export function mount(root) {
   // 가변 알림 추가 — 앱(STBlankProject)의 "가변 시간" 버튼처럼 가까운 예약의 종료 시각/남은시간을 표시.
   const variableBtn = el("button", { className: "btn-line", textContent: "시간", onclick: openPicker });
   const pickerBtn = el("button", { className: "btn-line", textContent: "추가", onclick: openPicker });
-  const presetRow = el("div", { className: "preset-row" },
-    PRESETS.map((m) => el("button", { className: "preset", textContent: `${m}분`, onclick: () => addOnce(m, "타임 알람") }))
-  );
 
   const listEl = el("ul", { className: "reminders" });
 
@@ -96,7 +92,6 @@ export function mount(root) {
       variableBtn,
       el("div", { className: "row-btns" }, [pickerBtn, hourlyBtn]),
     ]),
-    presetRow,
     listEl,
   ]);
 
@@ -249,75 +244,45 @@ export function mount(root) {
     hourlyBtn.classList.toggle("on", on);
   }
 
+  // 대기중(서버 기준 아직 안 끝남)은 취소만 가능(재설정은 뜰 일이 없어 아예 표시 안 함),
+  // 완료·취소 이력은 시간값(분)순 정렬 + 항상 "설정"(재시작)/"삭제"만 표시 — 종료 시각·
+  // 남은시간 문구 없이 "알림(N분)" 한 줄로 단순 표기.
   function renderList(historyLedger) {
     listEl.innerHTML = "";
     const now = Date.now();
-    // 대기중(서버 기준 아직 안 끝남)은 가까운 시각순, 완료·취소 이력은 설정했던 시간값(분)순 — 앱과 동일.
     const active = reminders.filter((r) => r.recurrence !== "hourly" && r.fire_at > now)
-      .map((r) => ({ ...r, cancelled: false }))
       .sort((a, b) => a.fire_at - b.fire_at);
     const finished = historyLedger.slice()
       .sort((a, b) => (getDuration(a.id) ?? Infinity) - (getDuration(b.id) ?? Infinity));
-    const merged = [...active, ...finished];
-    if (!merged.length) {
+    if (!active.length && !finished.length) {
       listEl.appendChild(el("li", { className: "empty" }, "예약된 알림이 없습니다."));
       return;
     }
-    for (const r of merged) {
-      const finished = r.cancelled || r.fire_at <= Date.now();
-      // 가변/타임 알람을 구분하지 않고, 설정했던 시간값(분)으로 표기 — 같은 값이 여러 개 있어도 무방.
-      const prefixSpan = el("span", {}, `알림(${durationLabel(getDuration(r.id))}) 종료: ${fmtTime(r.fire_at)} `);
-      // el()은 Object.assign으로 props를 적용하므로 "data-*"는 실제 속성으로 반영되지 않음(getAttribute로 못 읽힘) — setAttribute로 직접 설정.
-      const remainSpan = el("span", { className: "remain" });
-      remainSpan.setAttribute("data-fire", String(r.fire_at));
-      remainSpan.setAttribute("data-cancelled", r.cancelled ? "1" : "0");
-      // 앱의 셀과 동일한 상태 규칙: 대기중엔 "취소"만 동작(재설정 비활성), 취소·완료되면 "재설정"이 켜지고 "삭제"로 바뀜.
-      const resetBtn = el("button", { className: "reset", textContent: "재설정", disabled: !finished, onclick: () => resetAlarm(r) });
-      const actionBtn = el("button", {
-        className: "cancel",
-        textContent: finished ? "삭제" : "취소",
-        // 초 단위 updateRemains()가 텍스트/버튼 상태만 갱신하고 onclick은 다시 안 묶으므로,
-        // 렌더링 시점의 finished를 캡처하지 않고 클릭 시점에 다시 판정한다.
-        onclick: () => ((r.cancelled || r.fire_at <= Date.now()) ? deleteAlarm(r) : cancelAlarm(r)),
-      });
+    for (const r of active) {
       const li = el("li", {}, [
-        el("span", { className: "rmd-text" }, [prefixSpan, remainSpan]),
-        el("div", { className: "rmd-actions" }, [resetBtn, actionBtn]),
+        el("span", { className: "rmd-text" }, `알림(${durationLabel(getDuration(r.id))})`),
+        el("div", { className: "rmd-actions" }, [
+          el("button", { className: "cancel", textContent: "취소", onclick: () => cancelAlarm(r) }),
+        ]),
       ]);
       listEl.appendChild(li);
     }
-    updateRemains();
+    for (const r of finished) {
+      const li = el("li", {}, [
+        el("span", { className: "rmd-text" }, `알림(${durationLabel(getDuration(r.id))})`),
+        el("div", { className: "rmd-actions" }, [
+          el("button", { className: "reset", textContent: "설정", onclick: () => resetAlarm(r) }),
+          el("button", { className: "cancel", textContent: "삭제", onclick: () => deleteAlarm(r) }),
+        ]),
+      ]);
+      listEl.appendChild(li);
+    }
+    updateVariableBtn();
   }
 
-  // 매초: 시계 + 카운트다운(남은시간)만 클라이언트 계산
+  // 매초: 시계 + "시간" 버튼의 남은시간만 갱신(리스트 항목엔 더 이상 실시간 문구가 없음).
   function updateClock() {
     clock.textContent = new Date().toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "medium" });
-  }
-  function updateRemains() {
-    const now = Date.now();
-    listEl.querySelectorAll("li").forEach((li) => {
-      const span = li.querySelector(".remain");
-      if (!span) return;
-      const cancelled = span.getAttribute("data-cancelled") === "1";
-      const fire = Number(span.getAttribute("data-fire"));
-      const left = fire - now;
-      const finished = cancelled || left <= 0;
-      if (cancelled) {
-        span.textContent = "· 취소됨";
-        span.classList.add("done");
-      } else if (finished) {
-        span.textContent = "· 완료됨";
-        span.classList.add("done");
-      } else {
-        span.textContent = `· 남은시간: ${fmtRemain(left)}`;
-        span.classList.remove("done");
-      }
-      const resetBtn = li.querySelector(".reset");
-      const actionBtn = li.querySelector(".cancel");
-      if (resetBtn) resetBtn.disabled = !finished;
-      if (actionBtn) actionBtn.textContent = finished ? "삭제" : "취소";
-    });
-    updateVariableBtn();
   }
 
   // "시간" 버튼에 가장 가까운 대기중 알림의 종료 시각 + 남은시간을 표시(앱의 동적 라벨과 동일 — 리스트 항목과 같은 포맷).
@@ -336,7 +301,7 @@ export function mount(root) {
 
   // ── 초기화 ──
   updateClock();
-  tickTimer = setInterval(() => { updateClock(); updateRemains(); }, 1000);
+  tickTimer = setInterval(() => { updateClock(); updateVariableBtn(); }, 1000);
 
   (async () => {
     pushOn = await isPushEnabled();

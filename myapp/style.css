@@ -192,18 +192,6 @@ button:active { transform: scale(0.97); }
 .row-btns { display: flex; gap: 0.4rem; margin-left: auto; flex-shrink: 0; }
 .row-btns .btn-line { width: auto; margin: 0; white-space: nowrap; flex-shrink: 0; }
 
-.preset-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
-.preset {
-  flex: 1;
-  min-width: 3.5rem;
-  padding: 0.5rem;
-  font-size: 0.9rem;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--bg);
-  color: var(--text);
-}
-
 .reminders { list-style: none; margin-top: 1rem; }
 .reminders li {
   display: flex;
@@ -217,11 +205,8 @@ button:active { transform: scale(0.97); }
   font-size: 0.88rem;
 }
 .reminders li.empty { justify-content: center; background: transparent; }
-/* 첫 줄(알림 시간/종료 시각) · 둘째 줄(남은시간/완료·취소) — 폰 폭에서 잘리지 않게 두 줄로 분리 */
-.rmd-text { display: flex; flex-direction: column; gap: 0.15rem; flex: 1; min-width: 0; }
-.rmd-text > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
-.remain { color: var(--accent); font-variant-numeric: tabular-nums; }
-.remain.done { color: var(--muted); }
+/* "알림(N분)" 한 줄 표기 — 폰 폭에서 안 잘리게 말줄임 */
+.rmd-text { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .rmd-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
 .cancel {
   padding: 0.3rem 0.7rem;
@@ -239,7 +224,6 @@ button:active { transform: scale(0.97); }
   background: var(--accent);
   color: #fff;
 }
-.reset:disabled { background: #475569; color: var(--muted); opacity: 0.6; }
 
 /* ── 입력 폼(웹뷰/유튜브 공용) ── */
 .wv-form { display: flex; flex-direction: column; gap: 0.5rem; }
