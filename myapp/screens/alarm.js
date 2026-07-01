@@ -7,12 +7,11 @@ import { isPushEnabled, enablePush, addReminder, listReminders, cancelReminder }
 export const title = "알림";
 
 const PICKER_KEY = "alarmPickerHM"; // 마지막 선택 시간/분 기억 { h, m } — 특정 시각이 아니라 "지금으로부터" 걸리는 시간(듀레이션)
-const DURATIONS_KEY = "alarmDurations"; // { reminderId: minutes } — 서버는 fire_at만 갖고 있어 "재설정"용 원래 분값을 기기에 따로 기억해둔다.
-// 서버는 취소=완전삭제, 완료=cron이 곧 삭제(수정/soft-cancel API 없음)만 지원한다. 앱(STBlankProject)처럼
-// 취소·완료된 알림도 목록에 계속 남기려고(같은 분(duration) 알림을 여러 개 동시에 돌리는 것도 허용해야 하므로,
-// 중복 방지가 아니라 "완료/취소 기록 보존" 목적), 기기에 별도로 영구 기록해뒀다가 서버 목록과 합쳐서 보여준다.
-// "삭제"를 눌러야만 이 기록에서 없어지고, "재설정"을 눌러도 기존 기록은 그대로 남고 새 대기 항목만 추가된다.
-const HISTORY_KEY = "alarmHistory"; // [{ id, title, fire_at, cancelled }]
+const DURATIONS_KEY = "alarmDurations"; // { reminderId: minutes } — 서버는 fire_at만 갖고 있어 대기중 항목 표기용 원래 분값을 기기에 따로 기억해둔다.
+// 아래쪽은 "이력"이 아니라 "선택(바로가기)" 섹션이다 — 예전 상단 프리셋 버튼(5/10/15/30/60분)을 대신함.
+// "추가"로 새 시간값을 예약할 때마다 그 분값을 여기 등록해두고(이미 있으면 중복 등록 안 함),
+// "설정"을 누르면 그 분값으로 즉시 다시 예약한다. "취소"한 항목은 여기 남기지 않는다.
+const SELECTIONS_KEY = "alarmSelections"; // [minutes, ...] 중복 없는 분값 목록
 
 function saveDuration(id, minutes) {
   const map = get(DURATIONS_KEY, {});
@@ -31,7 +30,7 @@ function durationLabel(minutes) {
   if (m <= 0) return `${h}시간`;
   return `${h}시간 ${m}분`;
 }
-// 서버 목록 + 취소 목록에 모두 없는 id는 기억해둘 필요 없음 — reload마다 정리.
+// 대기중인 알림에도 없는 id는 기억해둘 필요 없음 — reload마다 정리.
 function pruneDurations(ids) {
   const map = get(DURATIONS_KEY, {});
   const keep = new Set(ids);
@@ -42,23 +41,23 @@ function pruneDurations(ids) {
   if (changed) set(DURATIONS_KEY, map);
 }
 
-function getHistory() {
-  return get(HISTORY_KEY, []);
+function getSelections() {
+  return get(SELECTIONS_KEY, []);
 }
-// id 기준으로만 중복을 막는다(같은 레코드가 이력에 두 번 들어가는 것 방지) — 시간값(분)이
-// 같은 서로 다른 레코드가 여러 개 있는 것은 정상이며 막지 않는다.
-function addToHistory(r, cancelled) {
-  const list = getHistory().filter((c) => c.id !== r.id);
-  list.push({ id: r.id, title: r.title, fire_at: r.fire_at, cancelled });
-  set(HISTORY_KEY, list);
+// 이미 있는 분값이면 추가하지 않는다(선택 섹션은 분값 기준 중복 없음).
+function ensureSelection(minutes) {
+  const list = getSelections();
+  if (!list.includes(minutes)) {
+    list.push(minutes);
+    set(SELECTIONS_KEY, list);
+  }
 }
-function removeFromHistory(id) {
-  set(HISTORY_KEY, getHistory().filter((c) => c.id !== id));
+function removeSelection(minutes) {
+  set(SELECTIONS_KEY, getSelections().filter((m) => m !== minutes));
 }
 
 export function mount(root) {
   let reminders = [];
-  let historyLedger = [];
   let pushOn = false;
   let pollTimer = null;
   let tickTimer = null;
@@ -101,26 +100,19 @@ export function mount(root) {
 
   // ── 동작 ──
   // 같은 시간값(분)이라도 대기중인 알림은 여러 개가 동시에 돌아갈 수 있어야 하므로
-  // 중복 방지를 하지 않는다(STBlankProject 원본과 동일). 완료/취소된 기록 쪽은 addToHistory가
-  // id 기준으로만 걸러내 같은 레코드가 두 번 들어가는 것만 막는다.
+  // 중복 방지를 하지 않는다(STBlankProject 원본과 동일). 대신 아래쪽 "선택" 섹션에는
+  // 그 분값을 등록해둔다(이미 있으면 중복 등록 안 함 — ensureSelection).
   async function addOnce(minutes, label) {
     if (!minutes || minutes <= 0) return setStatus("분을 올바르게 입력하세요.");
     try {
       const res = await addReminder({ type: "once", minutes, title: label, body: `${minutes}분 뒤 알림입니다.` });
       if (res && res.id) saveDuration(res.id, minutes);
+      ensureSelection(minutes);
       setStatus(`${minutes}분 뒤로 예약되었습니다.`);
       await reload();
     } catch (e) {
       setStatus("예약 실패: " + e.message);
     }
-  }
-
-  // 앱의 "재설정"과 동일: 원래 예약했던 분(duration)을 그대로 재사용해 지금부터 다시 예약.
-  // 기존 완료/취소 기록은 그대로 두고(목록에서 사라지지 않음) 새 대기 항목만 추가한다.
-  async function resetAlarm(r) {
-    const minutes = getDuration(r.id);
-    if (!minutes) return setStatus("이 알림은 다시 설정할 수 없습니다.");
-    await addOnce(minutes, r.title);
   }
 
   const WHEEL_ITEM_H = 40; // 아래 CSS .wheel-item height와 반드시 일치해야 함
@@ -202,41 +194,28 @@ export function mount(root) {
     }
   }
 
-  // "취소"는 서버에서 완전 삭제(예약 발송을 실제로 막기 위함)하되, 앱처럼 목록에는
-  // "취소됨" 상태로 남겨서(이력 보존) 나중에 "재설정"으로 다시 걸 수 있게 한다.
+  // "취소"는 서버에서 완전 삭제하고 그걸로 끝 — 아래쪽 선택 섹션은 건드리지 않는다.
   async function cancelAlarm(r) {
     const ok = await confirmDialog("이 알림을 취소하시겠습니까?", { okText: "예", cancelText: "아니오", danger: true });
     if (!ok) return;
     try { await cancelReminder(r.id); } catch {}
-    addToHistory(r, true);
     await reload();
   }
 
-  // "삭제"는 이력에서 완전히 없앤다(취소됨/완료됨 상태에서만 노출) — 이력 기록을 지우는 유일한 방법.
-  async function deleteAlarm(r) {
+  // 선택 섹션에서 "삭제" — 그 분값을 바로가기 목록에서만 없앤다(현재 대기중인 같은 분값의
+  // 알림이 있어도 그건 그대로 둠 — 바로가기만 지우는 것).
+  async function deleteSelection(minutes) {
     const ok = await confirmDialog("이 알림을 삭제하시겠습니까?", { okText: "예", cancelText: "아니오", danger: true });
     if (!ok) return;
-    removeFromHistory(r.id);
-    try { await cancelReminder(r.id); } catch {}
-    await reload();
+    removeSelection(minutes);
+    renderList();
   }
 
   async function reload() {
     reminders = await listReminders();
-    historyLedger = getHistory();
-    // 방금 자연 종료(시간 경과)된 항목을 이력에 스냅샷으로 남긴다 — 서버(cron)가 곧 지워버리기
-    // 전에 기록해두고, 같은 항목이 또 발송되지 않도록 서버에서도 정리한다.
-    const historyIds = new Set(historyLedger.map((h) => h.id));
-    const now = Date.now();
-    const justExpired = reminders.filter((r) => r.recurrence !== "hourly" && r.fire_at <= now && !historyIds.has(r.id));
-    for (const r of justExpired) {
-      addToHistory(r, false);
-      try { await cancelReminder(r.id); } catch {}
-    }
-    if (justExpired.length) historyLedger = getHistory();
-    pruneDurations([...reminders.map((r) => r.id), ...historyLedger.map((r) => r.id)]);
+    pruneDurations(reminders.map((r) => r.id));
     renderHourly();
-    renderList(historyLedger);
+    renderList();
   }
 
   function renderHourly() {
@@ -244,45 +223,62 @@ export function mount(root) {
     hourlyBtn.classList.toggle("on", on);
   }
 
-  // 대기중(서버 기준 아직 안 끝남)은 취소만 가능(재설정은 뜰 일이 없어 아예 표시 안 함),
-  // 완료·취소 이력은 시간값(분)순 정렬 + 항상 "설정"(재시작)/"삭제"만 표시 — 종료 시각·
-  // 남은시간 문구 없이 "알림(N분)" 한 줄로 단순 표기.
-  function renderList(historyLedger) {
+  // 대기중(취소만 가능)은 종료 시각 + 남은시간을 2줄로 표시(실시간 갱신), 아래쪽 "선택" 섹션
+  // (분값 오름차순)은 "알림(N분)" 한 줄 + "설정"(그 분값으로 즉시 재예약)/"삭제"(바로가기 제거).
+  function renderList() {
     listEl.innerHTML = "";
     const now = Date.now();
     const active = reminders.filter((r) => r.recurrence !== "hourly" && r.fire_at > now)
       .sort((a, b) => a.fire_at - b.fire_at);
-    const finished = historyLedger.slice()
-      .sort((a, b) => (getDuration(a.id) ?? Infinity) - (getDuration(b.id) ?? Infinity));
-    if (!active.length && !finished.length) {
+    const selections = getSelections().slice().sort((a, b) => a - b);
+    if (!active.length && !selections.length) {
       listEl.appendChild(el("li", { className: "empty" }, "예약된 알림이 없습니다."));
       return;
     }
     for (const r of active) {
+      const prefixSpan = el("span", {}, `알림(${durationLabel(getDuration(r.id))}) 종료: ${fmtTime(r.fire_at)}`);
+      // el()은 Object.assign으로 props를 적용하므로 "data-*"는 실제 속성으로 반영되지 않음(getAttribute로 못 읽힘) — setAttribute로 직접 설정.
+      const remainSpan = el("span", { className: "remain" });
+      remainSpan.setAttribute("data-fire", String(r.fire_at));
       const li = el("li", {}, [
-        el("span", { className: "rmd-text" }, `알림(${durationLabel(getDuration(r.id))})`),
+        el("span", { className: "rmd-text" }, [prefixSpan, remainSpan]),
         el("div", { className: "rmd-actions" }, [
           el("button", { className: "cancel", textContent: "취소", onclick: () => cancelAlarm(r) }),
         ]),
       ]);
       listEl.appendChild(li);
     }
-    for (const r of finished) {
+    for (const minutes of selections) {
       const li = el("li", {}, [
-        el("span", { className: "rmd-text" }, `알림(${durationLabel(getDuration(r.id))})`),
+        el("span", { className: "rmd-text" }, `알림(${durationLabel(minutes)})`),
         el("div", { className: "rmd-actions" }, [
-          el("button", { className: "reset", textContent: "설정", onclick: () => resetAlarm(r) }),
-          el("button", { className: "cancel", textContent: "삭제", onclick: () => deleteAlarm(r) }),
+          el("button", { className: "reset", textContent: "설정", onclick: () => addOnce(minutes, "가변 알림") }),
+          el("button", { className: "cancel", textContent: "삭제", onclick: () => deleteSelection(minutes) }),
         ]),
       ]);
       listEl.appendChild(li);
     }
-    updateVariableBtn();
+    updateRemains();
   }
 
-  // 매초: 시계 + "시간" 버튼의 남은시간만 갱신(리스트 항목엔 더 이상 실시간 문구가 없음).
+  // 매초: 시계 + 대기중 항목의 남은시간(remain) + "시간" 버튼을 갱신.
   function updateClock() {
     clock.textContent = new Date().toLocaleString("ko-KR", { dateStyle: "medium", timeStyle: "medium" });
+  }
+  function updateRemains() {
+    const now = Date.now();
+    listEl.querySelectorAll(".remain").forEach((span) => {
+      const fire = Number(span.getAttribute("data-fire"));
+      const left = fire - now;
+      if (left <= 0) {
+        span.textContent = "· 완료됨";
+        span.classList.add("done");
+      } else {
+        span.textContent = `· 남은시간: ${fmtRemain(left)}`;
+        span.classList.remove("done");
+      }
+    });
+    updateVariableBtn();
   }
 
   // "시간" 버튼에 가장 가까운 대기중 알림의 종료 시각 + 남은시간을 표시(앱의 동적 라벨과 동일 — 리스트 항목과 같은 포맷).
@@ -301,7 +297,7 @@ export function mount(root) {
 
   // ── 초기화 ──
   updateClock();
-  tickTimer = setInterval(() => { updateClock(); updateVariableBtn(); }, 1000);
+  tickTimer = setInterval(() => { updateClock(); updateRemains(); }, 1000);
 
   (async () => {
     pushOn = await isPushEnabled();

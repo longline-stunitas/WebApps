@@ -205,8 +205,21 @@ button:active { transform: scale(0.97); }
   font-size: 0.88rem;
 }
 .reminders li.empty { justify-content: center; background: transparent; }
-/* "알림(N분)" 한 줄 표기 — 폰 폭에서 안 잘리게 말줄임 */
-.rmd-text { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* 대기중 항목은 2줄(종료 시각/남은시간), 아래쪽 선택(바로가기) 섹션은 "알림(N분)" 한 줄 —
+   폰 폭에서 안 잘리게 각 줄 말줄임 */
+.rmd-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.rmd-text > span { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.remain { color: var(--accent); font-variant-numeric: tabular-nums; }
+.remain.done { color: var(--muted); }
 .rmd-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
 .cancel {
   padding: 0.3rem 0.7rem;
