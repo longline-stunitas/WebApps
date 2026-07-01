@@ -1,5 +1,5 @@
 // 알림 화면 — 구 "걸음수" 화면에서 걸음수/셀룰러/충전 제외.
-// 실시간 시계 · 정시 알림 토글 · 가변(N분 뒤) 알림 + 프리셋 · 출석시간 저장.
+// 실시간 시계 · 정시 알림 토글 · 가변(N분 뒤) 알림 + 프리셋.
 import { get, set } from "../lib/store.js";
 import { el, setStatus, fmtRemain, fmtTime } from "../lib/ui.js";
 import { isPushEnabled, enablePush, addReminder, listReminders, cancelReminder } from "../lib/push.js";
@@ -7,40 +7,9 @@ import { isPushEnabled, enablePush, addReminder, listReminders, cancelReminder }
 export const title = "알림";
 
 const PRESETS = [5, 10, 15, 30, 60];
-const ATT_KEY = "attendanceData";
-
-// ── 출석/입실 시간 ──
-function loadAttendance() {
-  return get(ATT_KEY, { attendanceTime: null, launchTime: null });
-}
-function isToday(d) {
-  const n = new Date();
-  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
-}
-function initAttendance() {
-  // 날짜가 바뀌면(오늘이 아니면) 출석 기록 초기화 — 하루 단위
-  const a = loadAttendance();
-  if (a.attendanceTime && !isToday(new Date(a.attendanceTime))) {
-    set(ATT_KEY, { attendanceTime: null, launchTime: null });
-  }
-}
-function saveAttendance() {
-  const a = loadAttendance();
-  const now = new Date().toISOString();
-  if (!a.attendanceTime) a.attendanceTime = now; // 첫번째시간(하루 최초, 고정)
-  else a.launchTime = now;                        // 이후시간(누를 때마다 갱신)
-  set(ATT_KEY, a);
-}
-function clearAttendance() {
-  set(ATT_KEY, { attendanceTime: null, launchTime: null });
-}
-function attText(iso) {
-  return iso ? new Date(iso).toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "medium" }) : "없음";
-}
+const PICKER_KEY = "alarmPickerTime"; // 마지막 선택 시:분:초 기억 (STBlankProject 가변알림과 동일한 방식)
 
 export function mount(root) {
-  initAttendance();
-
   let reminders = [];
   let pushOn = false;
   let pollTimer = null;
@@ -48,23 +17,6 @@ export function mount(root) {
 
   // ── DOM ──
   const clock = el("div", { className: "clock" }, "—");
-
-  // 출석
-  const attFirst = el("span", {}, "없음");
-  const attLater = el("span", {}, "없음");
-  const attBox = el("div", { className: "att-box" }, [
-    el("div", { className: "att-row" }, [el("b", {}, "첫번째시간"), attFirst]),
-    el("div", { className: "att-row" }, [el("b", {}, "이후시간"), attLater]),
-    el("div", { className: "att-actions" }, [
-      el("button", { className: "btn-line", textContent: "시간저장", onclick: () => { saveAttendance(); refreshAtt(); setStatus("시간이 저장되었습니다."); } }),
-      el("button", { className: "btn-line danger", textContent: "데이터 지움", onclick: () => { clearAttendance(); refreshAtt(); setStatus("출석 데이터를 삭제하였습니다."); } }),
-    ]),
-  ]);
-  function refreshAtt() {
-    const a = loadAttendance();
-    attFirst.textContent = attText(a.attendanceTime);
-    attLater.textContent = attText(a.launchTime);
-  }
 
   // 알림 켜기 (구독 전)
   const enableBtn = el("button", {
@@ -84,6 +36,7 @@ export function mount(root) {
   // 가변 알림 추가
   const minutesInput = el("input", { type: "number", min: "1", value: "5", inputMode: "numeric" });
   const addBtn = el("button", { className: "btn-line", textContent: "예약", onclick: () => addOnce(parseInt(minutesInput.value, 10), "가변 알림") });
+  const pickerBtn = el("button", { className: "btn-line", textContent: "추가", onclick: openPicker });
   const presetRow = el("div", { className: "preset-row" },
     PRESETS.map((m) => el("button", { className: "preset", textContent: `${m}분`, onclick: () => addOnce(m, "타임 알람") }))
   );
@@ -92,15 +45,16 @@ export function mount(root) {
 
   const controls = el("div", { hidden: true }, [
     hourlyBtn,
-    el("div", { className: "row" }, [minutesInput, el("span", {}, "분 뒤"), addBtn]),
+    el("div", { className: "row" }, [
+      minutesInput,
+      el("span", {}, "분 뒤"),
+      el("div", { className: "row-btns" }, [addBtn, pickerBtn]),
+    ]),
     presetRow,
     listEl,
   ]);
 
   root.appendChild(clock);
-  root.appendChild(el("h3", { className: "sec" }, "출석 시간"));
-  root.appendChild(attBox);
-  root.appendChild(el("h3", { className: "sec" }, "예약 알림"));
   root.appendChild(enableBtn);
   root.appendChild(controls);
 
@@ -114,6 +68,33 @@ export function mount(root) {
     } catch (e) {
       setStatus("예약 실패: " + e.message);
     }
+  }
+
+  // STBlankProject 가변알림의 "추가" 버튼과 동일한 흐름: 시:분:초 피커로 값을 고르면
+  // 그 값을 목표 시각까지 남은 시간으로 환산해 addOnce로 예약한다(리스트는 아래쪽 listEl 그대로 사용).
+  function openPicker() {
+    const timeInput = el("input", { type: "time", step: "1", value: get(PICKER_KEY, "00:05:00") });
+    const okBtn = el("button", { className: "btn-line", textContent: "확인" });
+    const cancelBtn = el("button", { className: "btn-line", textContent: "취소" });
+    const card = el("div", { className: "modal-card" }, [
+      el("h3", { className: "modal-title" }, "가변 알림 추가"),
+      timeInput,
+      el("div", { className: "att-actions" }, [cancelBtn, okBtn]),
+    ]);
+    const layer = el("div", { className: "modal" }, [card]);
+    const close = () => layer.remove();
+    cancelBtn.onclick = close;
+    layer.onclick = (e) => { if (e.target === layer) close(); };
+    okBtn.onclick = () => {
+      const parts = (timeInput.value || "").split(":").map(Number);
+      const [h = 0, m = 0, s = 0] = parts;
+      const minutes = h * 60 + m + s / 60;
+      if (!minutes || minutes <= 0) return setStatus("시간을 올바르게 선택하세요.");
+      set(PICKER_KEY, timeInput.value);
+      close();
+      addOnce(minutes, "가변 알림");
+    };
+    document.body.appendChild(layer);
   }
 
   async function toggleHourly() {
@@ -196,7 +177,6 @@ export function mount(root) {
   }
 
   // ── 초기화 ──
-  refreshAtt();
   updateClock();
   tickTimer = setInterval(() => { updateClock(); updateRemains(); }, 1000);
 

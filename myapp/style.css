@@ -158,16 +158,13 @@ button:active { transform: scale(0.97); }
 /* ── 알림 화면 ── */
 .clock {
   text-align: center;
-  font-size: 1.4rem;
+  font-size: 2.2rem;
   font-variant-numeric: tabular-nums;
   padding: 0.8rem;
   background: var(--card);
   border-radius: 10px;
   margin-bottom: 0.5rem;
 }
-.att-box { background: var(--card); border-radius: 10px; padding: 0.8rem; }
-.att-row { display: flex; justify-content: space-between; font-size: 0.9rem; padding: 0.25rem 0; }
-.att-row b { color: var(--muted); font-weight: 500; }
 .att-actions { display: flex; gap: 0.5rem; margin-top: 0.6rem; }
 .att-actions .btn-line { margin-top: 0; }
 
@@ -182,7 +179,8 @@ button:active { transform: scale(0.97); }
   color: var(--text);
 }
 .row span { color: var(--muted); font-size: 0.9rem; }
-.row .btn-line { width: auto; margin: 0 0 0 auto; padding: 0.5rem 1rem; }
+.row-btns { display: flex; gap: 0.4rem; margin-left: auto; }
+.row-btns .btn-line { width: auto; margin: 0; padding: 0.5rem 1rem; }
 
 .preset-row { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.6rem; }
 .preset {
