@@ -8,8 +8,9 @@ import * as alarm from "./screens/alarm.js";
 import * as webview from "./screens/webview.js";
 import * as youtube from "./screens/youtube.js";
 import * as baduk from "./screens/baduk.js";
+import * as sobriety from "./screens/sobriety.js";
 
-const screens = { menu, alarm, webview, youtube, baduk };
+const screens = { menu, alarm, webview, youtube, baduk, sobriety };
 
 const appEl = document.getElementById("app");
 const titleEl = document.getElementById("screen-title");
