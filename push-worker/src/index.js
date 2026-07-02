@@ -53,10 +53,12 @@ export default {
         if (type === "once") {
           const minutes = Number(b.minutes);
           if (!minutes || minutes <= 0) return json({ error: "minutes required" }, 400);
-          // 분 경계(:00초)로 올림 정렬 → cron(매 1분)이 도는 바로 그 순간 발송된다.
-          // now의 초 성분이 섞여 한 박자 더 밀리던 문제를 없애고, "최소 N분"은 보장한다.
-          // (cron granularity가 1분이라 이게 달성 가능한 최선의 정확도)
-          fireAt = Math.ceil((now + minutes * 60_000) / 60_000) * 60_000;
+          // 분 경계(:00초)로 정렬 → cron(매 1분)이 도는 순간 발송된다.
+          // 올림(ceil)으로 고정하면 now의 초 성분에 따라 최대 59초 가까이 더 밀릴 수 있어
+          // (예: 20초에 1분 설정→1분40초 대기) 반올림(round)으로 가장 가까운 분 경계에 맞춘다.
+          // now의 초가 30 초과면 사실상 1분을 뺀 셈이 되고(다음 경계가 더 가까움),
+          // 30 이하면 기존과 동일하게 다음 경계로 올림된다 — 최대 초과 대기가 59초→약 30초로 줄어든다.
+          fireAt = Math.round((now + minutes * 60_000) / 60_000) * 60_000;
           recurrence = null;
           title = b.title || "알림";
           body = b.body || `${minutes}분 전에 요청한 알림입니다.`;
