@@ -9,6 +9,7 @@ export const MENU = [
   { key: "alarm", label: "알림", desc: "시계 · 정시/가변 알림 · 출석시간" },
   { key: "webview", label: "Webview Test", desc: "URL 북마크 열기" },
   { key: "youtube", label: "유튜브 강좌 타이틀리스트", desc: "재생목록 영상 제목 보기/재생" },
+  { key: "baduk", label: "바둑", desc: "강좌 기록 (준비 중)" },
 ];
 
 // 백업/복원 모달 — 내보내기(공유/다운로드/복사) + 가져오기(파일/붙여넣기 후 복원).
