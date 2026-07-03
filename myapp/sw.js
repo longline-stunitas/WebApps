@@ -1,7 +1,7 @@
 // myapp service worker
 // 1) 설치 가능(PWA) 요건 충족  2) 서버 푸시 알림 표시  3) network-first 캐싱
 
-const CACHE = "myapp-v53";
+const CACHE = "myapp-v54";
 const IMG_CACHE = "myapp-thumbs"; // 유튜브 썸네일 — 앱 버전과 무관하게 유지(네트워크 최소화)
 const ASSETS = [
   "./",

@@ -3,8 +3,11 @@
 // startDate/today: "YYYY-MM-DD" 문자열 또는 Date. 월(month)은 항상 0-indexed(JS Date 관례).
 
 export const DRINK_TYPES = [
-  { type: "소주", unit: "병" },
-  { type: "맥주", unit: "캔" },
+  { type: "소주 360ml", unit: "병" },
+  { type: "소주 640ml", unit: "병" },
+  { type: "맥주 355ml", unit: "캔" },
+  { type: "맥주 500ml", unit: "캔" },
+  { type: "맥주 740ml", unit: "캔" },
   { type: "막걸리", unit: "병" },
   { type: "양주", unit: "잔" },
 ];
@@ -33,6 +36,16 @@ export function currentStreak(drinksMap, startDate, today) {
     d = addDays(d, -1);
   }
   return streak;
+}
+
+// 365일 넘어가면 "N년 M일"로 표기(윤년 등 달력 오차는 무시 — 개인용 대략치).
+export function formatStreakDays(days) {
+  if (days >= 365) {
+    const years = Math.floor(days / 365);
+    const rest = days % 365;
+    return rest > 0 ? `${years}년 ${rest}일` : `${years}년`;
+  }
+  return `${days}일`;
 }
 
 export function longestStreak(drinksMap, startDate, today) {
@@ -121,6 +134,16 @@ export function typeTotalsForYear(drinksMap, year) {
   const totals = emptyTotals();
   for (const key of Object.keys(drinksMap)) {
     if (!key.startsWith(String(year))) continue;
+    addTotals(totals, drinksMap[key].items);
+  }
+  return totals;
+}
+
+export function typeTotalsForMonth(drinksMap, year, month0) {
+  const totals = emptyTotals();
+  const prefix = `${year}-${String(month0 + 1).padStart(2, "0")}`;
+  for (const key of Object.keys(drinksMap)) {
+    if (!key.startsWith(prefix)) continue;
     addTotals(totals, drinksMap[key].items);
   }
   return totals;

@@ -1,9 +1,9 @@
 // 금주 트래커 — 마신 날만 기록(무기록=금주). 기록/달력/통계 3탭.
-import { get, set } from "../lib/store.js";
+import { get, set, remove } from "../lib/store.js";
 import { el, confirmDialog, selectSheet } from "../lib/ui.js";
 import {
-  DRINK_TYPES, fmtDate, currentStreak, longestStreak,
-  calendarCells, dayStatus, monthSummary, yearMonthlyBars, yearsSummary, typeTotalsForYear,
+  DRINK_TYPES, fmtDate, currentStreak, longestStreak, formatStreakDays,
+  calendarCells, dayStatus, monthSummary, yearMonthlyBars, yearsSummary, typeTotalsForYear, typeTotalsForMonth,
 } from "../lib/sobrietyStats.js";
 
 export const title = "금주";
@@ -25,6 +25,7 @@ export function mount(root) {
   let tab = "log"; // "log" | "cal" | "stats"
   let calDate = new Date();
   let statsYear = new Date().getFullYear();
+  let selectedMonth0 = null; // 통계 탭에서 클릭으로 펼친 월(0-indexed), null이면 접힘
 
   const container = el("div", { className: "sob-root" });
   root.appendChild(container);
@@ -50,6 +51,35 @@ export function mount(root) {
       el("div", { className: "att-actions" }, [okBtn]),
     ]);
     container.appendChild(el("div", { className: "modal" }, [card]));
+  }
+
+  function openStartEditModal() {
+    const dateInput = el("input", { type: "date", value: start });
+    const close = () => layer.remove();
+    const saveBtn = el("button", {
+      className: "btn-primary", textContent: "저장",
+      onclick: () => {
+        if (!dateInput.value) return;
+        start = dateInput.value;
+        set(START_KEY, start);
+        close();
+        render();
+      },
+    });
+    const cancelBtn = el("button", { className: "btn-line", textContent: "취소", onclick: close });
+    const resetBtn = el("button", {
+      className: "btn-line danger", textContent: "데이터 초기화",
+      onclick: async () => { close(); await resetAll(); },
+    });
+    const card = el("div", { className: "modal-card" }, [
+      el("h3", { className: "modal-title" }, "금주 시작일 변경"),
+      el("p", { className: "hint" }, "이 날짜부터 오늘까지를 기준으로 연속 금주일수·통계를 다시 계산합니다."),
+      dateInput,
+      el("div", { className: "att-actions" }, [resetBtn, cancelBtn, saveBtn]),
+    ]);
+    const layer = el("div", { className: "modal" }, [card]);
+    layer.onclick = (e) => { if (e.target === layer) close(); };
+    document.body.appendChild(layer);
   }
 
   function openLogModal(dateKey) {
@@ -110,14 +140,27 @@ export function mount(root) {
     render();
   }
 
+  async function resetAll() {
+    const ok = await confirmDialog(
+      "금주 시작일과 모든 음주 기록을 완전히 초기화할까요? 되돌릴 수 없습니다.",
+      { okText: "초기화", danger: true },
+    );
+    if (!ok) return;
+    remove(START_KEY);
+    remove(DRINKS_KEY);
+    start = null;
+    drinks = {};
+    render();
+  }
+
   function buildSummary() {
     const now = today();
     const streak = currentStreak(drinks, start, now);
     const longest = longestStreak(drinks, start, now);
     const thisMonth = monthSummary(drinks, now.getFullYear(), now.getMonth(), start, now);
     return el("div", { className: "sob-summary" }, [
-      el("div", { className: "sob-stat big" }, [el("div", { className: "sob-num" }, String(streak)), el("div", { className: "sob-label" }, "연속 금주일")]),
-      el("div", { className: "sob-stat" }, [el("div", { className: "sob-num" }, String(longest)), el("div", { className: "sob-label" }, "최장 기록")]),
+      el("div", { className: "sob-stat big" }, [el("div", { className: "sob-num" }, formatStreakDays(streak)), el("div", { className: "sob-label" }, "연속 금주일")]),
+      el("div", { className: "sob-stat" }, [el("div", { className: "sob-num" }, formatStreakDays(longest)), el("div", { className: "sob-label" }, "최장 기록")]),
       el("div", { className: "sob-stat" }, [el("div", { className: "sob-num" }, thisMonth.soberRate != null ? `${thisMonth.soberRate}%` : "-"), el("div", { className: "sob-label" }, "이번달 금주율")]),
     ]);
   }
@@ -199,7 +242,7 @@ export function mount(root) {
       textContent: `${statsYear}년 ▾`,
       onclick: async () => {
         const picked = await selectSheet("연도 선택", [{ items: years.map((y) => ({ value: y.year, label: `${y.year}년` })) }], statsYear);
-        if (picked != null) { statsYear = picked; render(); }
+        if (picked != null) { statsYear = picked; selectedMonth0 = null; render(); }
       },
     }));
 
@@ -209,16 +252,25 @@ export function mount(root) {
     const barsEl = el("div", { className: "sob-bars" });
     bars.forEach((b) => {
       const h = b.trackedDays ? Math.round((b.drinkingDays / maxDrink) * 100) : 0;
-      barsEl.appendChild(el("div", { className: "sob-bar-col" }, [
+      barsEl.appendChild(el("div", {
+        className: "sob-bar-col" + (selectedMonth0 === b.month0 ? " selected" : ""),
+        onclick: () => { selectedMonth0 = selectedMonth0 === b.month0 ? null : b.month0; render(); },
+      }, [
         el("div", { className: "sob-bar-track" }, [el("div", { className: "sob-bar-fill", style: `height:${h}%` })]),
         el("div", { className: "sob-bar-label" }, String(b.month0 + 1)),
       ]));
     });
     wrap.appendChild(barsEl);
 
-    const totals = typeTotalsForYear(drinks, statsYear);
+    const totals = selectedMonth0 != null
+      ? typeTotalsForMonth(drinks, statsYear, selectedMonth0)
+      : typeTotalsForYear(drinks, statsYear);
     const totalAll = Object.values(totals).reduce((a, b) => a + b, 0);
-    wrap.appendChild(el("p", { className: "hint" }, `${statsYear}년 종류별 섭취량`));
+    const totalsLabel = selectedMonth0 != null ? `${statsYear}년 ${selectedMonth0 + 1}월 종류별 섭취량` : `${statsYear}년 종류별 섭취량`;
+    wrap.appendChild(el("div", { className: "sob-start-row" }, [
+      el("span", { className: "hint" }, totalsLabel),
+      selectedMonth0 != null ? el("button", { className: "mini", textContent: "연도 전체 보기", onclick: () => { selectedMonth0 = null; render(); } }) : null,
+    ].filter(Boolean)));
     const typeBars = el("div", { className: "sob-type-bars" });
     DRINK_TYPES.forEach(({ type, unit }) => {
       const n = totals[type] || 0;
@@ -248,6 +300,10 @@ export function mount(root) {
   function render() {
     container.innerHTML = "";
     if (!start) { ensureStart(); return; }
+    container.appendChild(el("div", { className: "sob-start-row" }, [
+      el("span", { className: "hint" }, `시작일: ${start}`),
+      el("button", { className: "mini", textContent: "변경", onclick: openStartEditModal }),
+    ]));
     container.appendChild(buildSummary());
     container.appendChild(buildTabs());
     if (tab === "log") container.appendChild(buildLogTab());
