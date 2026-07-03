@@ -1,7 +1,7 @@
 // myapp service worker
 // 1) 설치 가능(PWA) 요건 충족  2) 서버 푸시 알림 표시  3) network-first 캐싱
 
-const CACHE = "myapp-v54";
+const CACHE = "myapp-v55";
 const IMG_CACHE = "myapp-thumbs"; // 유튜브 썸네일 — 앱 버전과 무관하게 유지(네트워크 최소화)
 const ASSETS = [
   "./",
@@ -27,7 +27,11 @@ const ASSETS = [
 ];
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((c) => c.addAll(ASSETS)));
+  // GitHub Pages가 max-age=600 캐시 헤더를 붙이므로 cache:"reload"로 브라우저 HTTP 캐시를 우회해야
+  // addAll이 진짜 새 배포 내용을 받아온다(안 그러면 최근 10분 내 방문 이력이 있는 파일은 옛 내용 그대로 프리캐시됨).
+  event.waitUntil(
+    caches.open(CACHE).then((c) => c.addAll(ASSETS.map((url) => new Request(url, { cache: "reload" }))))
+  );
   self.skipWaiting();
 });
 
@@ -42,6 +46,10 @@ self.addEventListener("activate", (event) => {
 
 // 네트워크 우선(network-first): 온라인이면 항상 최신을 받고 캐시를 갱신,
 // 오프라인이면 캐시로 폴백. → 화면 수정이 앱 재실행만으로 즉시 반영됨.
+// cache:"no-cache"로 브라우저 HTTP 캐시(GitHub Pages max-age=600)를 건너뛰고 매번 서버에 조건부 요청
+// (If-None-Match)을 실제로 보낸다 — 안 그러면 fetch()가 "네트워크 우선"인 척하면서도 실은
+// 로컬 HTTP 캐시가 아직 안 만료된 파일을 그대로 반환해, 파일별로 갱신 여부가 들쭉날쭉해진다
+// (config.js만 새로 받아져 버전은 올라갔는데 다른 화면 js는 옛 내용인 버그의 원인).
 self.addEventListener("fetch", (event) => {
   const req = event.request;
   const url = new URL(req.url);
@@ -70,7 +78,7 @@ self.addEventListener("fetch", (event) => {
   event.respondWith(
     (async () => {
       try {
-        const fresh = await fetch(req);
+        const fresh = await fetch(req, { cache: "no-cache" });
         if (fresh && fresh.ok) {
           const cache = await caches.open(CACHE);
           cache.put(req, fresh.clone());
