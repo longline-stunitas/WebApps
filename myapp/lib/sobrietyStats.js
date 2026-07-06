@@ -29,6 +29,8 @@ function addDays(d, n) { const r = new Date(d); r.setDate(r.getDate() + n); retu
 export function currentStreak(drinksMap, startDate, today) {
   const start = midnight(toDate(startDate));
   let d = midnight(toDate(today));
+  if (drinksMap[fmtDate(d)]) return 0; // 오늘 마셨으면 즉시 0
+  d = addDays(d, -1); // 오늘은 아직 안 지났으니 카운트에서 제외, 어제부터 계산
   let streak = 0;
   while (d >= start) {
     if (drinksMap[fmtDate(d)]) break;
@@ -49,7 +51,7 @@ export function formatStreakDays(days) {
 }
 
 export function longestStreak(drinksMap, startDate, today) {
-  const end = midnight(toDate(today));
+  const end = addDays(midnight(toDate(today)), -1); // 오늘은 아직 안 지나서 최장기록 계산에서 제외
   let d = midnight(toDate(startDate));
   let longest = 0, cur = 0;
   while (d <= end) {
