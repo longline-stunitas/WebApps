@@ -8,6 +8,8 @@ export const DRINK_TYPES = [
   { type: "맥주 355ml", unit: "캔" },
   { type: "맥주 500ml", unit: "캔" },
   { type: "맥주 740ml", unit: "캔" },
+  { type: "생맥주 500cc", unit: "잔" },
+  { type: "생맥주 1000cc", unit: "잔" },
   { type: "막걸리", unit: "병" },
   { type: "양주", unit: "잔" },
 ];
@@ -72,14 +74,15 @@ export function calendarCells(year, month0) {
   return { leadingBlanks, days };
 }
 
-// "before"(추적 시작 전) | "future"(오늘 이후) | "drink"(마심) | "sober"(금주)
+// "before"(추적 시작 전) | "future"(오늘 이후) | "drink"(마심) | "today"(오늘, 아직 안 지나서 금주 확정 아님) | "sober"(금주)
 export function dayStatus(drinksMap, key, startDate, today) {
   const d = parseDateKey(key);
   const start = midnight(toDate(startDate));
   const end = midnight(toDate(today));
   if (d < start) return "before";
   if (d > end) return "future";
-  return drinksMap[key] ? "drink" : "sober";
+  if (drinksMap[key]) return "drink";
+  return d.getTime() === end.getTime() ? "today" : "sober";
 }
 
 function emptyTotals() {

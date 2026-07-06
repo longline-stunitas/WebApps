@@ -219,11 +219,12 @@ export function mount(root) {
     days.forEach((key) => {
       const status = dayStatus(drinks, key, start, now);
       const dayNum = Number(key.slice(-2));
-      grid.appendChild(el("div", {
+      const cell = el("div", {
         className: `sob-cal-cell ${status}`,
-        textContent: String(dayNum),
         onclick: () => { if (status !== "future") openLogModal(key); },
-      }));
+      }, [el("span", { className: "sob-cal-daynum" }, String(dayNum))]);
+      if (status === "today") cell.appendChild(el("span", { className: "sob-cal-todaytag" }, "오늘"));
+      grid.appendChild(cell);
     });
     wrap.appendChild(grid);
     wrap.appendChild(el("div", { className: "sob-legend" }, [
