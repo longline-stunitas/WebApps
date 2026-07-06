@@ -606,3 +606,25 @@ button:active { transform: scale(0.97); }
 
 .sob-year-table { display: flex; flex-direction: column; }
 .sob-year-row { display: flex; justify-content: space-between; padding: 0.4rem 0; border-bottom: 1px solid var(--line); font-size: 0.85rem; }
+
+/* ── 주식 시세 (키움) ── */
+.kw-add-row { display: flex; gap: 0.4rem; margin-bottom: 0.8rem; }
+.kw-add-input {
+  flex: 1;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.95rem;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--text);
+}
+.kw-card.selected { border-color: var(--accent); }
+.kw-card-main { display: flex; align-items: baseline; gap: 0.5rem; margin-top: 0.15rem; }
+.kw-price { font-size: 1.1rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kw-change { font-size: 0.82rem; font-variant-numeric: tabular-nums; }
+.kw-change.up { color: var(--danger); }     /* 국내 관행: 상승=빨강 */
+.kw-change.down { color: var(--accent); }   /* 하락=파랑 */
+.kw-change.flat { color: var(--muted); }
+.kw-loading, .kw-error { font-size: 0.82rem; color: var(--muted); }
+.kw-error { color: var(--danger); }
+.kw-chart .sob-bar-fill { background: var(--accent); }

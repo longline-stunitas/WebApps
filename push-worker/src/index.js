@@ -17,6 +17,118 @@ const json = (data, status = 200) =>
 // 매 정시(:00) 중 now 이후 가장 가까운 시각
 const nextTopOfHour = (now) => (Math.floor(now / HOUR_MS) + 1) * HOUR_MS;
 
+// ── 키움 REST API 프록시 (읽기 전용 시세 조회) ──
+class KiwoomError extends Error {
+  constructor(status, body) {
+    super(body?.error || `kiwoom error ${status}`);
+    this.status = status;
+    this.body = body;
+  }
+}
+
+// "YYYYMMDDHHMMSS"(KST 절대시각) → epoch ms. 한국은 서머타임 없음(UTC+9 고정).
+function parseKiwoomTs(ts) {
+  const y = +ts.slice(0, 4), mo = +ts.slice(4, 6), d = +ts.slice(6, 8);
+  const h = +ts.slice(8, 10), mi = +ts.slice(10, 12), s = +ts.slice(12, 14);
+  return Date.UTC(y, mo - 1, d, h - 9, mi, s);
+}
+
+// 캐시된 토큰이 있으면 재사용, 만료 5분 전이면 재발급(D1에 upsert)
+async function getKiwoomToken(env) {
+  const row = await env.DB.prepare(
+    `SELECT access_token, expires_at FROM kiwoom_tokens WHERE env='real'`
+  ).first();
+  const now = Date.now();
+  const SAFETY_MS = 5 * 60_000;
+  if (row && row.expires_at - SAFETY_MS > now) return row.access_token;
+
+  const r = await fetch("https://api.kiwoom.com/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/json;charset=UTF-8" },
+    body: JSON.stringify({
+      grant_type: "client_credentials",
+      appkey: env.KIWOOM_APPKEY,
+      secretkey: env.KIWOOM_SECRETKEY,
+    }),
+  });
+  if (!r.ok) throw new KiwoomError(502, { error: "kiwoom auth failed", detail: await r.text().catch(() => "") });
+  const data = await r.json();
+  const expiresAt = parseKiwoomTs(data.expires_dt);
+  await env.DB.prepare(
+    `INSERT INTO kiwoom_tokens (env, access_token, expires_at) VALUES ('real', ?, ?)
+     ON CONFLICT(env) DO UPDATE SET access_token=excluded.access_token, expires_at=excluded.expires_at`
+  )
+    .bind(data.token, expiresAt)
+    .run();
+  return data.token;
+}
+
+// 키움 TR 호출 공통 처리(토큰 획득/재발급 + 에러 매핑). apiId/헤더명·path는 devguide로 재확인 필요.
+async function kiwoomCall(env, path, apiId, body) {
+  if (!env.KIWOOM_APPKEY || !env.KIWOOM_SECRETKEY)
+    throw new KiwoomError(503, { error: "KIWOOM_APPKEY/KIWOOM_SECRETKEY not configured" });
+
+  let token;
+  try {
+    token = await getKiwoomToken(env);
+  } catch (e) {
+    if (e instanceof KiwoomError) throw e;
+    throw new KiwoomError(502, { error: "kiwoom auth failed", detail: String(e?.message || e) });
+  }
+
+  const r = await fetch(`https://api.kiwoom.com${path}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json;charset=UTF-8",
+      authorization: `Bearer ${token}`,
+      "cont-yn": "N",
+      "next-key": "",
+      "api-id": apiId,
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (r.status === 401) {
+    // 캐시된 토큰이 실제로는 만료/무효 → 지우고 다음 호출에서 재발급되게 함
+    await env.DB.prepare(`DELETE FROM kiwoom_tokens WHERE env='real'`).run();
+    throw new KiwoomError(502, { error: "kiwoom auth expired, retry" });
+  }
+  if (r.status === 429) throw new KiwoomError(429, { error: "kiwoom rate limited, slow down" });
+  if (!r.ok) {
+    const detail = await r.text().catch(() => "");
+    throw new KiwoomError(r.status >= 500 ? 502 : r.status, { error: `kiwoom ${r.status}`, detail });
+  }
+  return r.json();
+}
+
+// 원본 키움 필드명은 여기 안에만 존재 — devguide로 실제 필드명 확정되면 이 함수만 고치면 됨
+function reshapeQuote(code, data) {
+  const num = (v) => (v === undefined || v === null || v === "" ? null : Number(v));
+  return {
+    code,
+    name: data.stk_nm ?? data.hts_kor_isnm ?? null,
+    price: num(data.cur_prc ?? data.stck_prpr),
+    change: num(data.pred_pre ?? data.prdy_vrss),
+    changePct: num(data.flu_rt ?? data.prdy_ctrt),
+    prevClose: num(data.pred_close_prc),
+    volume: num(data.trde_qty ?? data.acml_vol),
+    updatedAt: Date.now(),
+  };
+}
+
+function reshapeDaily(code, data, count) {
+  const rows = data.output ?? data.stk_dt_pole_chart_qry ?? data.items ?? [];
+  const candles = rows
+    .slice(0, count)
+    .map((row) => ({
+      date: row.dt ?? row.stck_bsop_date ?? null,
+      close: Number(row.cur_prc ?? row.stck_clpr ?? 0),
+      changePct: row.flu_rt !== undefined ? Number(row.flu_rt) : null,
+    }))
+    .reverse(); // 오래된 날짜부터
+  return { code, candles };
+}
+
 export default {
   // ── HTTP API ──
   async fetch(request, env) {
@@ -168,6 +280,39 @@ export default {
         }
 
         return json({ items, hiddenCount });
+      }
+
+      // 키움 시세 조회 (읽기 전용, 앱키/시크릿은 secret으로 숨김)
+      if (path === "/api/kiwoom/quote" && request.method === "GET") {
+        const code = url.searchParams.get("code");
+        if (!code || !/^\d{6}$/.test(code)) return json({ error: "code must be 6-digit KRX code" }, 400);
+        try {
+          // TR id "ka10001"·path "/api/dostk/stkinfo"는 devguide로 재확인 필요
+          const data = await kiwoomCall(env, "/api/dostk/stkinfo", "ka10001", { stk_cd: code });
+          return json(reshapeQuote(code, data));
+        } catch (e) {
+          if (e instanceof KiwoomError) return json(e.body, e.status);
+          return json({ error: String(e?.message || e) }, 500);
+        }
+      }
+
+      // 키움 일봉 조회 (읽기 전용)
+      if (path === "/api/kiwoom/daily" && request.method === "GET") {
+        const code = url.searchParams.get("code");
+        if (!code || !/^\d{6}$/.test(code)) return json({ error: "code must be 6-digit KRX code" }, 400);
+        const count = Math.min(Math.max(Number(url.searchParams.get("count")) || 30, 1), 100);
+        try {
+          // TR id "ka10081"·path "/api/dostk/chart"는 devguide로 재확인 필요
+          const data = await kiwoomCall(env, "/api/dostk/chart", "ka10081", {
+            stk_cd: code,
+            base_dt: "",
+            upd_stkpc_tp: "1",
+          });
+          return json(reshapeDaily(code, data, count));
+        } catch (e) {
+          if (e instanceof KiwoomError) return json(e.body, e.status);
+          return json({ error: String(e?.message || e) }, 500);
+        }
       }
 
       // 즉시 테스트 발송

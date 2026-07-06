@@ -73,6 +73,8 @@ npx wrangler deploy
 | GET | `/api/reminders?endpoint=` | 예약 목록 |
 | DELETE | `/api/reminders?id=` | 예약 취소 |
 | GET | `/api/youtube/playlist?playlistId=` | 유튜브 재생목록 영상 목록(제목/videoId/썸네일). API 키는 secret으로 숨김 |
+| GET | `/api/kiwoom/quote?code=` | 키움 시세 조회(읽기 전용). 6자리 종목코드, 앱키/시크릿은 secret으로 숨김 |
+| GET | `/api/kiwoom/daily?code=&count=` | 키움 일봉 조회(읽기 전용, 기본 30개) |
 | POST | `/api/test` | 즉시 테스트 발송 (`{endpoint}`) |
 
 > `once` 예약의 `fire_at`은 분 경계(:00초)로 올림 정렬되어 cron(매 1분)과 동기화됩니다. "최소 N분"을 보장하면서 도래 분에 즉시 발송됩니다(1분 granularity 안에서 최선의 정확도).
@@ -86,6 +88,21 @@ npx wrangler secret put YOUTUBE_API_KEY
 ```
 
 미등록 시 해당 라우트는 503을 반환하고, 앱은 수동 입력으로 폴백합니다.
+
+## Kiwoom 시세 프록시 (선택, 읽기 전용)
+
+myapp의 "주식 시세" 화면을 쓰려면 **키움증권 REST API 앱키/시크릿**을 secret으로 등록하세요.
+(키움 REST API 포털 `openapi.kiwoom.com`에서 본인 명의 실계좌로 신청·발급 — 클라이언트/문서/git에 절대 적지 말 것)
+
+```bash
+npx wrangler secret put KIWOOM_APPKEY
+npx wrangler secret put KIWOOM_SECRETKEY
+```
+
+- 매매(주문)는 지원하지 않습니다 — 시세/일봉 조회만 프록시합니다.
+- OAuth 토큰은 D1(`kiwoom_tokens` 테이블)에 캐시되어 만료 5분 전에만 재발급됩니다(요청마다 재발급하지 않음).
+- 미등록 시 두 라우트 모두 503을 반환합니다.
+- TR id(`ka10001`/`ka10081`)와 정확한 요청 헤더명은 키움 공식 REST API devguide로 최종 확인이 필요합니다 — 실제 응답 필드명이 다르면 `src/index.js`의 `reshapeQuote`/`reshapeDaily` 함수만 수정하면 됩니다.
 
 ## 키 재발급
 

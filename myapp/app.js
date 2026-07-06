@@ -9,8 +9,9 @@ import * as webview from "./screens/webview.js";
 import * as youtube from "./screens/youtube.js";
 import * as baduk from "./screens/baduk.js";
 import * as sobriety from "./screens/sobriety.js";
+import * as kiwoom from "./screens/kiwoom.js";
 
-const screens = { menu, alarm, webview, youtube, baduk, sobriety };
+const screens = { menu, alarm, webview, youtube, baduk, sobriety, kiwoom };
 
 const appEl = document.getElementById("app");
 const titleEl = document.getElementById("screen-title");

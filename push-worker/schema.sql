@@ -21,3 +21,10 @@ CREATE TABLE IF NOT EXISTS reminders (
 
 CREATE INDEX IF NOT EXISTS idx_reminders_fire ON reminders(fire_at);
 CREATE INDEX IF NOT EXISTS idx_reminders_endpoint ON reminders(endpoint);
+
+-- 키움 REST API OAuth 토큰 캐시 (env: 'real' | 'mock', 1행씩)
+CREATE TABLE IF NOT EXISTS kiwoom_tokens (
+  env          TEXT PRIMARY KEY,
+  access_token TEXT NOT NULL,
+  expires_at   INTEGER NOT NULL   -- epoch ms
+);
