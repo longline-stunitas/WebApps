@@ -478,7 +478,7 @@ button:active { transform: scale(0.97); }
 .yt-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.2rem; }
 .yt-vtitle { font-size: 0.88rem; line-height: 1.35; }
 /* 영상시간: 제목 아래·썸네일 오른쪽. 다른 메타가 없어도 항상 표시 */
-.yt-time { font-size: 0.76rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.yt-time { font-size: 0.76rem; color: #fff; font-variant-numeric: tabular-nums; }
 
 /* 썸네일 아래(전체 너비): 메타 배지 + 메모. 내용 없으면 렌더 자체를 안 함(영역 숨김) */
 .yt-foot { display: flex; flex-direction: column; gap: 0.3rem; padding: 0 0.5rem 0.5rem; }
