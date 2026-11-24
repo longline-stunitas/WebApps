@@ -88,6 +88,7 @@ export function mount(root) {
     for (const { type } of DRINK_TYPES) counts[type] = existing ? (existing.items.find((i) => i.type === type)?.count || 0) : 0;
 
     const dateInput = el("input", { type: "date", value: dateKey });
+    const memoInput = el("textarea", { className: "sob-memo-input", rows: 3, placeholder: "마신 이유·상황 메모 (선택)", value: existing?.memo || "" });
     const rows = DRINK_TYPES.map(({ type, unit }) => {
       const span = el("span", {}, `${counts[type]}${unit}`);
       const dec = el("button", { className: "mini", textContent: "−", onclick: () => { if (counts[type] > 0) { counts[type]--; span.textContent = `${counts[type]}${unit}`; } } });
@@ -105,7 +106,8 @@ export function mount(root) {
         const newKey = dateInput.value || dateKey;
         const items = DRINK_TYPES.filter(({ type }) => counts[type] > 0).map(({ type }) => ({ type, count: counts[type] }));
         if (newKey !== dateKey) delete drinks[dateKey];
-        if (items.length) drinks[newKey] = { items };
+        const memo = memoInput.value.trim();
+        if (items.length) drinks[newKey] = memo ? { items, memo } : { items };
         else delete drinks[newKey];
         saveDrinks();
         close();
@@ -125,6 +127,7 @@ export function mount(root) {
       el("h3", { className: "modal-title" }, "음주 기록"),
       dateInput,
       ...rows,
+      memoInput,
       el("div", { className: "att-actions" }, [delBtn, cancelBtn, saveBtn].filter(Boolean)),
     ]);
     const layer = el("div", { className: "modal" }, [card]);
@@ -191,7 +194,8 @@ export function mount(root) {
         const openBtn = el("button", { className: "wv-open", onclick: () => openLogModal(key) }, [
           el("span", { className: "menu-label" }, key),
           el("span", { className: "menu-desc" }, describeItems(rec.items)),
-        ]);
+          rec.memo ? el("span", { className: "sob-memo" }, `📝 ${rec.memo}`) : null,
+        ].filter(Boolean));
         const ctrls = el("div", { className: "wv-ctrls" }, [
           el("button", { className: "mini danger", textContent: "삭제", onclick: () => deleteLog(key) }),
         ]);
@@ -224,13 +228,34 @@ export function mount(root) {
         onclick: () => { if (status !== "future") openLogModal(key); },
       }, [el("span", { className: "sob-cal-daynum" }, String(dayNum))]);
       if (status === "today") cell.appendChild(el("span", { className: "sob-cal-todaytag" }, "오늘"));
+      if (drinks[key]?.memo) cell.appendChild(el("span", { className: "sob-cal-memodot" }));
       grid.appendChild(cell);
     });
     wrap.appendChild(grid);
     wrap.appendChild(el("div", { className: "sob-legend" }, [
       el("span", { className: "sob-legend-item" }, [el("span", { className: "sob-dot drink" }), " 마심"]),
       el("span", { className: "sob-legend-item" }, [el("span", { className: "sob-dot sober" }), " 금주"]),
+      el("span", { className: "sob-legend-item" }, [el("span", { className: "sob-dot memo" }), " 메모 있음"]),
     ]));
+
+    const monthKeys = days.filter((k) => drinks[k]);
+    wrap.appendChild(el("p", { className: "hint" }, `${month0 + 1}월 음주 기록`));
+    const listEl = el("div", { className: "wv-list" });
+    if (!monthKeys.length) {
+      listEl.appendChild(el("div", { className: "empty" }, "이 달은 기록이 없습니다."));
+    } else {
+      monthKeys.forEach((key) => {
+        const rec = drinks[key];
+        listEl.appendChild(el("div", { className: "wv-item" }, [
+          el("button", { className: "wv-open", onclick: () => openLogModal(key) }, [
+            el("span", { className: "menu-label" }, key),
+            el("span", { className: "menu-desc" }, describeItems(rec.items)),
+            rec.memo ? el("span", { className: "sob-memo" }, `📝 ${rec.memo}`) : null,
+          ].filter(Boolean)),
+        ]));
+      });
+    }
+    wrap.appendChild(listEl);
     return wrap;
   }
 

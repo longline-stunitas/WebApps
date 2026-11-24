@@ -578,17 +578,22 @@ button:active { transform: scale(0.97); }
   background: var(--card);
   cursor: pointer;
 }
+.sob-cal-cell { position: relative; }
 .sob-cal-cell.empty { background: transparent; cursor: default; }
 .sob-cal-cell.before, .sob-cal-cell.future { opacity: 0.3; cursor: default; }
 .sob-cal-cell.drink { background: var(--danger); color: #111; font-weight: 700; }
 .sob-cal-cell.sober { background: var(--ok); color: #111; }
 .sob-cal-cell.today { border: 2px solid var(--accent); }
 .sob-cal-todaytag { font-size: 0.5rem; line-height: 1; color: var(--accent); font-weight: 700; }
+.sob-cal-memodot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+.sob-memo { display: block; font-size: 0.78rem; color: var(--muted); margin-top: 0.15rem; white-space: pre-wrap; word-break: break-all; }
+.modal-card textarea.sob-memo-input { padding: 0.6rem; font-size: 1rem; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--text); font-family: inherit; resize: vertical; }
 .sob-legend { display: flex; gap: 1rem; font-size: 0.78rem; color: var(--muted); }
 .sob-legend-item { display: inline-flex; align-items: center; gap: 0.3rem; }
 .sob-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; }
 .sob-dot.drink { background: var(--danger); }
 .sob-dot.sober { background: var(--ok); }
+.sob-dot.memo { background: var(--accent); width: 6px; height: 6px; }
 
 .sob-bars { display: flex; align-items: flex-end; gap: 0.3rem; height: 110px; }
 .sob-bar-col { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 0.2rem; cursor: pointer; }
