@@ -1,0 +1,7 @@
+yt-dlp
+opencv-python-headless
+numpy
+faster-whisper; sys_platform != "darwin" or platform_machine != "arm64"
+mlx-whisper; sys_platform == "darwin" and platform_machine == "arm64"
+# faster-whisper 1.2.1 은 av 19 에서 metadata_errors 오류가 남
+av<18

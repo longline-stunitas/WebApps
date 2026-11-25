@@ -19,6 +19,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > 새 앱을 추가하면 이 표에 한 줄 추가하세요.
 
+`baduk-extract/` 는 웹앱이 아니라 바둑 강의 영상에서 수순과 해설을 추출하는 로컬 Python 도구입니다. 실행법·진행 상황·남은 일은 `baduk-extract/README.md` 참고.
+
 `myapp`은 아이폰 홈 화면 설치 + 알림을 목표로 한 PWA입니다. iOS 제약(16.4+, HTTPS 필수, 홈 화면 추가한 standalone 앱에서만 알림 권한 가능)은 `myapp/README.md`에 정리되어 있습니다. 알림 관련 작업 시 그 문서를 먼저 확인하세요.
 
 ### push-worker (myapp 백엔드)
